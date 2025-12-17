@@ -1,0 +1,8 @@
+create_issue_data()
+split_issue_data(issue_data=ISSUE_DATA)
+train_issue_data(file_name='/scratch/singh.divya/less100/series_issue_train.csv', model_loc=ISSUE_TRAINED_MODEL)
+y_true, y_pred = make_preds(model_loc=ISSUE_TRAINED_MODEL, test_file='/scratch/singh.divya/less100/series_issue_test.csv')
+classifier_eval(y_true=y_true, y_pred=y_pred)
+logits_df = get_logits(file_path='/scratch/singh.divya/less100/series_issue_test.csv', model_loc=ISSUE_TRAINED_MODEL)
+logits_df.to_csv('/scratch/singh.divya/less100/issue_logits.csv', index=False)
+get_probabilities('/scratch/singh.divya/less100/series_issue_logits.csv', '/scratch/singh.divya/less100/series_issue_scores.csv')
