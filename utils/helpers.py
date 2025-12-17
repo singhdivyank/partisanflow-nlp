@@ -45,31 +45,6 @@ def preprocess_text(text) -> str:
     filtered_tokens = [token for token in tokens if token not in STOPWORDS and len(token) > 1]
     return ' '.join(filtered_tokens)
 
-def create_max_pool_df(source_file, target_file) -> None:
-    """
-    Perform max pooling based on absolute logit values
-    
-    Parameters:
-    source_file (str): Path to the source CSV file with logits
-    target_file (str): Path to the target CSV file to save pooled results
-    """
-
-    final_col_names = ["series", "issue", "new_text", "processed_text", "logits", "label", "id", "date"]
-
-    # read source file
-    logits_df = pd.read_csv(source_file)
-    # calculate absolute logit
-    logits_df['abs_logit'] = logits_df['logits'].abs()
-    # sort by issue and absolute logit descending
-    df_sorted = logits_df.sort_values(by=['issue', 'abs_logit'], ascending=[True, False])
-    # drop duplicates, keeping most confident prediction for each issue
-    issue_df = df_sorted.drop_duplicates(subset=['issue'], keep='first')[final_col_names]
-    # assign predicted label based on logit sign
-    issue_df['predicted_label'] = (issue_df['logits'] > 0).astype(int)
-    # save to csv
-    issue_df.to_csv(target_file, index=False)
-    print(f"Max pooled data saved to {target_file}")
-
 def plot_hist(file_name, partisanship):
     img_name = "rep_prob_hist.png" if partisanship == 'republican' else "dem_prob_hist.png"
     y_col = 'prob_republican' if partisanship == 'republican' else 'prob_democrat'

@@ -1,7 +1,3 @@
-"""
-
-"""
-
 import os
 import logging
 import numpy as np
@@ -105,95 +101,138 @@ def preprocess():
     except Exception as e:
         logger.error(f"An error occurred during pre processing: {e}")
 
-def train_model():
-    """Train the classification model on the training data"""
+def train_model(split_col: str):
+    """
+    Train the classification model on the training data
     
-    chunks = pd.read_csv(ISSUE_TRAIN, chunksize=CHUNK_SIZE)
-    train_baseline(chunks=chunks, model_loc=ISSUE_TRAINED_MODEL, stopwords=STOPWORDS)
-    # chunks = pd.read_csv(SERIES_TRAIN, chunksize=CHUNK_SIZE)
-    # train_baseline(chunks=chunks, model_loc=SERIES_TRAINED_MODEL)
-    # chunks = pd.read_csv(PARA_TRAIN, chunksize=CHUNK_SIZE)
-    # train_baseline(chunks=chunks, model_loc=PARA_TRAINED_MODEL)
+    Parameters:
+    split_col (str): Column name to split on for unique values.
+    """
 
-def eval_model():
-    """Evaluate the trained model on the test data"""
-    test_chunks = pd.read_csv(ISSUE_TEST, chunksize=CHUNK_SIZE)
-    eval_performance(model_loc=ISSUE_TRAINED_MODEL, chunks=test_chunks, stopwords=STOPWORDS)    
-    # test_chunks = pd.read_csv(SERIES_TEST, chunksize=CHUNK_SIZE)
-    # eval_performance(model_loc=SERIES_TRAINED_MODEL, chunks=test_chunks, stopwords=STOPWORDS)
-    # test_chunks = pd.read_csv(PARA_TEST, chunksize=CHUNK_SIZE)
-    # eval_performance(model_loc=PARA_TRAINED_MODEL, chunks=test_chunks, stopwords=STOPWORDS)
-
-def get_logits():
-    """Get logits for the test data using the trained model"""
-    test_chunks = pd.read_csv(ISSUE_TEST, chunksize=CHUNK_SIZE)
-    logits_chunks = create_logits(chunks=test_chunks, model_loc=ISSUE_TRAINED_MODEL, stopwords=STOPWORDS)
-    # test_chunks = pd.read_csv(SERIES_TEST, chunksize=CHUNK_SIZE)
-    # logits_chunks = create_logits(chunks=test_chunks, model_loc=SERIES_TRAINED_MODEL, stopwords=STOPWORDS)
-    # test_chunks = pd.read_csv(PARA_TEST, chunksize=CHUNK_SIZE)
-    # logits_chunks = create_logits(chunks=test_chunks, model_loc=PARA_TRAINED_MODEL, stopwords=STOPWORDS)
+    train_data, train_model = ISSUE_TRAIN, ISSUE_TRAINED_MODEL
+    if split_col == 'series':
+        train_data, train_model = SERIES_TRAIN, SERIES_TRAINED_MODEL
+    if split_col == 'para':
+        train_data, train_model = PARA_TRAIN, PARA_TRAINED_MODEL
     
+    chunks = pd.read_csv(train_data, chunksize=CHUNK_SIZE)
+    train_baseline(chunks=chunks, model_loc=train_model, stopwords=STOPWORDS)
+
+def eval_model(split_col: str):
+    """
+    Evaluate the trained model on the test data
+    
+    Parameters:
+    split_col (str): Column name to split on for unique values.
+    """
+
+    test_data, train_model = ISSUE_TEST, ISSUE_TRAINED_MODEL
+    if split_col == 'series':
+        test_data, train_model = SERIES_TEST, SERIES_TRAINED_MODEL
+    if split_col == 'para':
+        test_data, train_model = PARA_TEST, PARA_TRAINED_MODEL
+
+    test_chunks = pd.read_csv(test_data, chunksize=CHUNK_SIZE)
+    eval_performance(model_loc=train_model, chunks=test_chunks, stopwords=STOPWORDS)
+
+def get_logits(split_col: str):
+    """
+    Get logits for the test data using the trained model
+    
+    Parameters:
+    split_col (str): Column name to split on for unique values.
+    """
+    
+    test_file, model_loc, logits_file = ISSUE_TEST, ISSUE_TRAINED_MODEL, ISSUE_LOGITS_DATA
+    if split_col == 'series':
+        test_file, model_loc, logits_file = SERIES_TEST, SERIES_TRAINED_MODEL, SERIES_LOGITS_DATA
+    if split_col == 'para':
+        test_file, model_loc, logits_file = PARA_TEST, PARA_TRAINED_MODEL, PARA_LOGITS_DATA
+    
+    test_chunks = pd.read_csv(test_file, chunksize=CHUNK_SIZE)
+    logits_chunks = create_logits(chunks=test_chunks, model_loc=model_loc, stopwords=STOPWORDS)
     if logits_chunks:
         logits_df = pd.concat(logits_chunks, ignore_index=True)
-        logits_df.to_csv(ISSUE_LOGITS_DATA, index=False)
-        print("Logits saved to", ISSUE_LOGITS_DATA)
-        # logits_df.to_csv(SERIES_LOGITS_DATA, index=False)
-        # print("Logits saved to", SERIES_LOGITS_DATA)
-        # logits_df.to_csv(PARA_LOGITS_DATA, index=False)
-        # print("Logits saved to", PARA_LOGITS_DATA)
+        logits_df.to_csv(logits_file, index=False)
+        logger.info(f"Logits saved to {logits_file}")
 
-def create_prob_df(source_file: str, target_file: str):
+def create_prob_df(split_col: str):
     """
     Create probability DataFrame from logits
     
     Parameters:
-    source_file (str): Path to the source CSV file with logits
-    target_file (str): Path to the target CSV file to save probabilities
+    split_col (str): Column name to split on for unique values.
     """
+
+    source_file, target_file = ISSUE_MAX_POOL_DATA, ISSUE_PROB_DATA
+    if split_col == 'series':
+        source_file = SERIES_MAX_POOL_DATA
+        target_file = SERIES_PROB_DATA
+    if split_col == 'para':
+        source_file = PARA_MAX_POOL_DATA
+        target_file = PARA_PROB_DATA
 
     df = pd.read_csv(source_file)
     df['prob_republican'] = 1 / (1 + np.exp(-df['logits']))
     df['prob_democrat'] = 1 - df['prob_republican']
     df.to_csv(target_file)
 
+def create_max_pool_df(split_col: str) -> None:
+    """
+    Perform max pooling based on absolute logit values
+    
+    Parameters:
+    split_col (str): Column name to split on for unique values.
+    """
+
+    final_col_names = ["series", "issue", "new_text", "processed_text", "logits", "label", "id", "date"]
+    source_file, target_file = ISSUE_LOGITS_DATA, ISSUE_MAX_POOL_DATA
+    if split_col == 'series':
+        source_file = SERIES_LOGITS_DATA
+        target_file = SERIES_MAX_POOL_DATA
+    if split_col == 'para':
+        source_file = PARA_LOGITS_DATA
+        target_file = PARA_MAX_POOL_DATA
+
+    # read source file
+    logits_df = pd.read_csv(source_file)
+    # calculate absolute logit
+    logits_df['abs_logit'] = logits_df['logits'].abs()
+    # sort by issue and absolute logit descending
+    df_sorted = logits_df.sort_values(by=['issue', 'abs_logit'], ascending=[True, False])
+    # drop duplicates, keeping most confident prediction for each issue
+    issue_df = df_sorted.drop_duplicates(subset=['issue'], keep='first')[final_col_names]
+    # assign predicted label based on logit sign
+    issue_df['predicted_label'] = (issue_df['logits'] > 0).astype(int)
+    # save to csv
+    issue_df.to_csv(target_file, index=False)
+    print(f"Max pooled data saved to {target_file}")
+
 if __name__=='__main__':
 
     logger = setup_env()
-
-
     # initialize data
     init_data(
         parquet_path = os.getenv('PARQUET_FILE'),
         metadata_path = os.getenv('METADATA_CSV'),
         output_dir = os.getenv('MASTER_DIR')
     )
-    
     # pre-process data
     preprocess()
-    
     # split into train and test data
     split_data(file_name=PROCESSED_DATA, train_data_loc=ISSUE_TRAIN, test_data_loc=ISSUE_TEST, split_col='issue')
     # split_data(file_name=PROCESSED_DATA, train_data_loc=SERIES_TRAIN, test_data_loc=SERIES_TEST, split_col='series')
     # split_data(file_name=PROCESSED_DATA, train_data_loc=PARA_TRAIN, test_data_loc=PARA_TEST, stratify=True)
     
     # train model
-    train_model()
-    
+    train_model(split_col='issue')
     # evaluate model
-    eval_model()
-    
+    eval_model(split_col='issue')
     # get logits for test data
-    get_logits()
-    
+    get_logits(split_col='issue')
     # perform max pooling
-    create_max_pool_df(source_file=ISSUE_LOGITS_DATA, target_file=ISSUE_MAX_POOL_DATA)
-    # create_max_pool_df(source_file=SERIES_LOGITS_DATA, target_file=SERIES_MAX_POOL_DATA)
-    # create_max_pool_df(source_file=PARA_LOGITS_DATA, target_file=PARA_MAX_POOL_DATA)
-    
+    create_max_pool_df(split_col='issue')
     # create probabilities
-    create_prob_df(source_file=ISSUE_MAX_POOL_DATA, target_file=ISSUE_PROB_DATA)
-    # create_prob_df(source_file=SERIES_MAX_POOL_DATA, target_file=SERIES_PROB_DATA)
-    # create_prob_df(source_file=PARA_MAX_POOL_DATA, target_file=PARA_PROB_DATA)
-
+    create_prob_df(split_col='issue')
     # visualise probability distribution
     plot_hist(file_name=ISSUE_PROB_DATA, partisanship='republican')
