@@ -1,27 +1,27 @@
+"""
+Main entry point for Partisan Classification pipeline.
+"""
+
 import os
-import logging
+
 import numpy as np
 import pandas as pd
-
 from dotenv import load_dotenv
 
-from pyspark.sql import SparkSession
-
-from utils.consts import *
-from utils.helpers import preprocess_text, STOPWORDS, create_max_pool_df, plot_hist
-from utils.dataprep import *
+from utils.consts import CHUNK_SIZE, PREPARED_DATA, PROCESSED_DATA
 from utils.data_splitting import split_data
-from model import train_baseline, eval_performance, create_logits
+from utils.dataprep import concatenate, create_data, process_metadata
+from utils.helpers import STOPWORDS, plot_hist, preprocess_text
+from utils.logger_config import setup_logger
+from utils.model import create_logits, eval_performance, train_baseline
+from utils.path_utils import get_para_paths
+from utils.spark_session import get_spark_session, stop_spark_session
 
-def setup_env():
+logger = setup_logger(__name__)
+
+def setup_env() -> None:
     """Setup environment variables from .env file."""
     load_dotenv()
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler()]
-    )
 
     dirs = [
         os.getenv('MASTER_DIR'),
@@ -29,64 +29,67 @@ def setup_env():
         os.path.dirname(PREPARED_DATA)
     ]
 
-    for dir in filter(None, dirs):
-        os.makedirs(dir, exist_ok=True)
-    
-    return logging.getLogger(__name__)
+    for d in filter(None, dirs):
+        os.makedirs(d, exist_ok=True)
 
-def init_data(parquet_path: str, metadata_path: str, output_dir: str):
-    """Initialize data by reading parquet and metadata, joining, and saving to CSV."""
+def init_data(parquet_path: str, metadata_path: str, output_dir: str) -> None:
+    """
+    Initialize data by reading parquet and metadata, joining, and saving to CSV.
+    
+    Parameters:
+    parquet_path (str): Path to the Parquet file.
+    metadata_path (str): Path to the metadata CSV file.
+    output_dir (str): Directory to save the intermediate CSV files.
+    """
 
     # initialize spark session
-    spark = SparkSession.builder.appName("PartisianClassification").getOrCreate()
+    spark = get_spark_session()
 
-    # read data
-    df = create_data(spark_session=spark, parquet_loc=parquet_path)
-    if df is None:
-        print("Data initialization failed, could not read Parquet")
-        spark.stop()
-        return
-    print(f"Read corpus from: {parquet_path}")
-    
-    # read metadata
-    csv_df = process_metadata(spark_session=spark, csv_file=metadata_path)
-    if csv_df is None:
-        print("Data initialization failed, could not read Metadata CSV")
-        spark.stop()
-        return
-    print(f"Read metadata from: {metadata_path}")
+    try:
+        # read data
+        df = create_data(spark_session=spark, parquet_loc=parquet_path)
+        logger.info(f"Read corpus from: {parquet_path}")
+        
+        # read metadata
+        csv_df = process_metadata(spark_session=spark, csv_file=metadata_path)
+        logger.info(f"Read metadata from: {metadata_path}")
 
-    # inner join
-    df = df.join(csv_df, on='series', how='inner')
-    # save multiple csv files in directory
-    df.write.csv(output_dir, header=True, escape='"')
-    print(f"Joined data saved to directory: {output_dir}")
-    
-    # concatenate into single dataframe
-    concat_df = concatenate(data_dir=output_dir)
-    if concat_df is None:
-        print("Data concatenation failed")
-        spark.stop()
-        return
-    print("Data concatenation successful")
-    
-    # save to csv
-    concat_df.to_csv(PREPARED_DATA, index=False, header=True, quoting=1)
-    print(f"Prepared data saved to: {PREPARED_DATA}")
-    
-    spark.stop()
+        # inner join
+        df = df.join(csv_df, on='series', how='inner')
+        # save multiple csv files in directory
+        df.write.csv(output_dir, header=True, escape='"')
+        logger.info(f"Joined data saved to directory: {output_dir}")
+        
+        # concatenate into single dataframe
+        concat_df = concatenate(data_dir=output_dir)
+        if concat_df is None:
+            logger.error("Data concatenation failed")
+            return
+        
+        # save to csv
+        concat_df.to_csv(PREPARED_DATA, index=False, header=True, quoting=1)
+        logger.info(f"Prepared data saved to: {PREPARED_DATA}")
+    except Exception as e:
+        logger.error(f"Data initialization failed: {e}")
+    finally:
+        stop_spark_session()
 
-def preprocess():
+def preprocess() -> None:
     """Pre-process the prepared training data and save to CSV"""
     
-    cols_to_keep = ['series', 'issue', 'date', 'id', 'new_text', 'processed_text', 'label']
+    cols_to_keep = [
+        'series', 'issue', 'date', 'id', 
+        'new_text', 'processed_text', 'label'
+    ]
     
     try:
         # read master data
         training_df = pd.read_csv(PREPARED_DATA)
         # Convert date column if it exists
         if 'date' in training_df.columns:
-            training_df['date'] = pd.to_datetime(training_df['date'], errors='coerce')
+            training_df['date'] = pd.to_datetime(
+                training_df['date'], errors='coerce'
+            )
         # Fill missing values
         training_df['new_text'] = training_df['new_text'].fillna('')
         # Preprocess text
@@ -94,14 +97,16 @@ def preprocess():
         # keep only relevant columns and drop NA
         training_df = training_df[cols_to_keep].dropna()
         # filter out texts with fewer than 100 words
-        training_df = training_df[training_df['processed_text'].apply(lambda x: len(str(x).split()) >= 100)]
+        training_df = training_df[
+            training_df['processed_text'].apply(lambda x: len(str(x).split()) >= 100)
+        ]
         # save to csv
         training_df.to_csv(PROCESSED_DATA, index=False)
         logger.info(f"Pre-processed data saved to: {PROCESSED_DATA}")
     except Exception as e:
         logger.error(f"An error occurred during pre processing: {e}")
 
-def train_model(split_col: str):
+def train_model(split_col: str) -> None:
     """
     Train the classification model on the training data
     
@@ -109,16 +114,11 @@ def train_model(split_col: str):
     split_col (str): Column name to split on for unique values.
     """
 
-    train_data, train_model = ISSUE_TRAIN, ISSUE_TRAINED_MODEL
-    if split_col == 'series':
-        train_data, train_model = SERIES_TRAIN, SERIES_TRAINED_MODEL
-    if split_col == 'para':
-        train_data, train_model = PARA_TRAIN, PARA_TRAINED_MODEL
-    
-    chunks = pd.read_csv(train_data, chunksize=CHUNK_SIZE)
-    train_baseline(chunks=chunks, model_loc=train_model, stopwords=STOPWORDS)
+    paths = get_para_paths(split_col)
+    chunks = pd.read_csv(paths['train'], chunksize=CHUNK_SIZE)
+    train_baseline(chunks=chunks, model_loc=paths['model'], stopwords=STOPWORDS)
 
-def eval_model(split_col: str):
+def eval_model(split_col: str) -> None:
     """
     Evaluate the trained model on the test data
     
@@ -126,16 +126,11 @@ def eval_model(split_col: str):
     split_col (str): Column name to split on for unique values.
     """
 
-    test_data, train_model = ISSUE_TEST, ISSUE_TRAINED_MODEL
-    if split_col == 'series':
-        test_data, train_model = SERIES_TEST, SERIES_TRAINED_MODEL
-    if split_col == 'para':
-        test_data, train_model = PARA_TEST, PARA_TRAINED_MODEL
+    paths = get_para_paths(split_col)
+    test_chunks = pd.read_csv(paths['test'], chunksize=CHUNK_SIZE)
+    eval_performance(model_loc=paths['model'], chunks=test_chunks, stopwords=STOPWORDS)
 
-    test_chunks = pd.read_csv(test_data, chunksize=CHUNK_SIZE)
-    eval_performance(model_loc=train_model, chunks=test_chunks, stopwords=STOPWORDS)
-
-def get_logits(split_col: str):
+def get_logits(split_col: str) -> None:
     """
     Get logits for the test data using the trained model
     
@@ -143,20 +138,15 @@ def get_logits(split_col: str):
     split_col (str): Column name to split on for unique values.
     """
     
-    test_file, model_loc, logits_file = ISSUE_TEST, ISSUE_TRAINED_MODEL, ISSUE_LOGITS_DATA
-    if split_col == 'series':
-        test_file, model_loc, logits_file = SERIES_TEST, SERIES_TRAINED_MODEL, SERIES_LOGITS_DATA
-    if split_col == 'para':
-        test_file, model_loc, logits_file = PARA_TEST, PARA_TRAINED_MODEL, PARA_LOGITS_DATA
-    
-    test_chunks = pd.read_csv(test_file, chunksize=CHUNK_SIZE)
-    logits_chunks = create_logits(chunks=test_chunks, model_loc=model_loc, stopwords=STOPWORDS)
+    paths = get_para_paths(split_col)
+    test_chunks = pd.read_csv(paths['test'], chunksize=CHUNK_SIZE)
+    logits_chunks = create_logits(chunks=test_chunks, model_loc=paths['model'], stopwords=STOPWORDS)
     if logits_chunks:
         logits_df = pd.concat(logits_chunks, ignore_index=True)
-        logits_df.to_csv(logits_file, index=False)
-        logger.info(f"Logits saved to {logits_file}")
+        logits_df.to_csv(paths['logits'], index=False)
+        logger.info(f"Logits saved to {paths['logits']}")
 
-def create_prob_df(split_col: str):
+def create_prob_df(split_col: str) -> None:
     """
     Create probability DataFrame from logits
     
@@ -164,18 +154,12 @@ def create_prob_df(split_col: str):
     split_col (str): Column name to split on for unique values.
     """
 
-    source_file, target_file = ISSUE_MAX_POOL_DATA, ISSUE_PROB_DATA
-    if split_col == 'series':
-        source_file = SERIES_MAX_POOL_DATA
-        target_file = SERIES_PROB_DATA
-    if split_col == 'para':
-        source_file = PARA_MAX_POOL_DATA
-        target_file = PARA_PROB_DATA
-
-    df = pd.read_csv(source_file)
-    df['prob_republican'] = 1 / (1 + np.exp(-df['logits']))
-    df['prob_democrat'] = 1 - df['prob_republican']
-    df.to_csv(target_file)
+    paths = get_para_paths(split_col)
+    prob_df = pd.read_csv(paths['max_pool'])
+    prob_df['prob_republican'] = 1 / (1 + np.exp(-prob_df['logits']))
+    prob_df['prob_democrat'] = 1 - prob_df['prob_republican']
+    prob_df.to_csv(paths['prob'], index=False)
+    logger.info(f"Predicted probability scores saved to {paths['prob']}")
 
 def create_max_pool_df(split_col: str) -> None:
     """
@@ -185,17 +169,14 @@ def create_max_pool_df(split_col: str) -> None:
     split_col (str): Column name to split on for unique values.
     """
 
-    final_col_names = ["series", "issue", "new_text", "processed_text", "logits", "label", "id", "date"]
-    source_file, target_file = ISSUE_LOGITS_DATA, ISSUE_MAX_POOL_DATA
-    if split_col == 'series':
-        source_file = SERIES_LOGITS_DATA
-        target_file = SERIES_MAX_POOL_DATA
-    if split_col == 'para':
-        source_file = PARA_LOGITS_DATA
-        target_file = PARA_MAX_POOL_DATA
+    final_col_names = [
+        "series", "issue", "new_text", "processed_text", 
+        "logits", "label", "id", "date"
+    ]
 
+    paths = get_para_paths(split_col)
     # read source file
-    logits_df = pd.read_csv(source_file)
+    logits_df = pd.read_csv(paths['logits'])
     # calculate absolute logit
     logits_df['abs_logit'] = logits_df['logits'].abs()
     # sort by issue and absolute logit descending
@@ -205,8 +186,41 @@ def create_max_pool_df(split_col: str) -> None:
     # assign predicted label based on logit sign
     issue_df['predicted_label'] = (issue_df['logits'] > 0).astype(int)
     # save to csv
-    issue_df.to_csv(target_file, index=False)
-    print(f"Max pooled data saved to {target_file}")
+    issue_df.to_csv(paths['max_pool'], index=False)
+    logger.info(f"Max pooled data saved to {paths['max_pool']}")
+
+def run_pipeline(split_col: str, stratify: bool = False) -> None:
+    """
+    Runs the complete classification pipeline for a given split-type.
+
+    Parameters:
+    split_col (str): Column name to split on for unique values ('issue' or 'series').
+    stratify (bool, optional): Whether to stratify the split based on the 'label' column. Default is False.
+    """
+
+    paths = get_para_paths(split_col=split_col)
+    logger.info(f"Running pipeline for {split_col}")
+
+    # split into train and test data
+    split_kwargs = {'split_col': split_col} if split_col != 'para' else {'stratify': stratify}
+    split_data(
+        file_name=PROCESSED_DATA, train_data_loc=paths['train'], 
+        test_data_loc=paths['test'], **split_kwargs
+    )
+    # train model
+    train_model(split_col=split_col)
+    # evaluate model
+    eval_model(split_col=split_col)
+    # get logits for test data
+    get_logits(plit_col=split_col)
+    # perform max pooling
+    create_max_pool_df(plit_col=split_col)
+    # create probabilities
+    create_prob_df(plit_col=split_col)
+    # visualise probability distribution
+    plot_hist(file_name=paths['prob'], partisanship='republican')
+
+    logger.info(f"Pipeline for {split_col} completed.")
 
 if __name__=='__main__':
 
@@ -219,20 +233,7 @@ if __name__=='__main__':
     )
     # pre-process data
     preprocess()
-    # split into train and test data
-    split_data(file_name=PROCESSED_DATA, train_data_loc=ISSUE_TRAIN, test_data_loc=ISSUE_TEST, split_col='issue')
-    # split_data(file_name=PROCESSED_DATA, train_data_loc=SERIES_TRAIN, test_data_loc=SERIES_TEST, split_col='series')
-    # split_data(file_name=PROCESSED_DATA, train_data_loc=PARA_TRAIN, test_data_loc=PARA_TEST, stratify=True)
-    
-    # train model
-    train_model(split_col='issue')
-    # evaluate model
-    eval_model(split_col='issue')
-    # get logits for test data
-    get_logits(split_col='issue')
-    # perform max pooling
-    create_max_pool_df(split_col='issue')
-    # create probabilities
-    create_prob_df(split_col='issue')
-    # visualise probability distribution
-    plot_hist(file_name=ISSUE_PROB_DATA, partisanship='republican')
+    # run paragraph-level pipelines
+    run_pipeline(split_col='issue')
+    run_pipeline(split_col='series')
+    run_pipeline(split_col='para', stratify=True)

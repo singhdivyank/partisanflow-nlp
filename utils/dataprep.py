@@ -1,19 +1,26 @@
 """
-Main code file to prepare training data
+Functions for creating and processing training data.
 """
 
 import glob
-import pandas as pd
 
+import pandas as pd
+from pyspark.sql import DataFrame
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
-def create_data(spark_session: any, parquet_loc: str) -> pd.DataFrame:
+from utils.logger_config import setup_logger
+
+logger = setup_logger(__name__)
+
+def create_data(spark_session: SparkSession, parquet_loc: str) -> DataFrame:
     """
     Create initial dataframe from parquet file by splitting into paragraphs and filtering by date
     
     Parameters:
     parquet_loc (str): Location of the parquet file
-    spark_session (any): Spark session object
+    spark_session (SparkSession): Spark session object
+    
     Returns:
     df: Spark DataFrame with columns series, issue, date, id, new_text
     """
@@ -31,17 +38,19 @@ def create_data(spark_session: any, parquet_loc: str) -> pd.DataFrame:
         df = df.filter((F.col('date')>='1869') & (F.col('date')<='1870'))
         return df
     except Exception as e:
-        raise RuntimeError(f"An error occurred while creating data from {parquet_loc}: {e}")
+        logger.error(f"An error occurred while creating data from {parquet_loc}: {e}")
+        raise RuntimeError(f"Failed to create data: {e}")
 
-def process_metadata(spark_session: any, csv_file: str) -> pd.DataFrame:
+def process_metadata(spark_session: SparkSession, csv_file: str) -> DataFrame:
     """
     Process metadata CSV to assign labels and filter out unwanted labels
     
     Parameters:
     csv_file (str): Location of the metadata CSV file
-    spark_session (any): Spark session object
+    spark_session (SparkSession): Spark session object
+    
     Returns:
-    csv_df: Spark DataFrame with columns series, contents, label
+    DataFrame: Spark DataFrame with columns series, contents, label
     """
     
     try:
@@ -55,10 +64,11 @@ def process_metadata(spark_session: any, csv_file: str) -> pd.DataFrame:
         # filter out independent and neutral labels
         csv_df = csv_df.filter((F.col('label') != 3) & (F.col('label') != 2))
         # keep only relevant columns
-        csv_df = csv_df.select('series', F.col('contents'), F.col('label'))
+        csv_df = csv_df.select('series', 'contents', 'label')
         return csv_df
     except Exception as e:
-        raise RuntimeError(f"Failed to process metadata {csv_file}: {e}")
+        logger.error(f"An error occurred while processing metadata {csv_file}: {e}")
+        raise RuntimeError(f"Failed to process metadata: {e}")
 
 def concatenate(data_dir: str) -> pd.DataFrame:
     """
@@ -66,6 +76,7 @@ def concatenate(data_dir: str) -> pd.DataFrame:
 
     Parameters:
     data_dir (str): Directory containing CSV files to concatenate.
+    
     Returns:
     pd.DataFrame: Concatenated DataFrame of all CSV files.
     """
@@ -73,16 +84,16 @@ def concatenate(data_dir: str) -> pd.DataFrame:
     # find all csv files in the directory
     csv_files = glob.glob(f"{data_dir}/*.csv")
     if not csv_files:
+        logger.warning(f"No CSV files found in directory: {data_dir}")
         return None
     
     try:
-        batches, temp_batch = [], []
-        # read the first file with header to get column names
         first_df = pd.read_csv(csv_files[0])
+        batches, temp_batch = [first_df], []
 
-        for idx, file in enumerate(csv_files[1:], 1):
+        for idx, file_name in enumerate(csv_files[1:], 1):
             # read the rest without header
-            temp_df = pd.read_csv(file, header=None, names=first_df.columns)
+            temp_df = pd.read_csv(file_name, header=None, names=first_df.columns)
             temp_batch.append(temp_df)
             if not idx % 1000:
                 # concatenate batch and reset
@@ -95,8 +106,40 @@ def concatenate(data_dir: str) -> pd.DataFrame:
             batch_df = pd.concat(temp_batch, ignore_index=True)
             batches.append(batch_df)
         
-        all_dfs = [[first_df][0]] + batches
-        result = pd.concat(all_dfs, ignore_index=True)
+        result = pd.concat(batches, ignore_index=True)
         return result
     except Exception as e:
-        raise RuntimeError(f"An error occurred while concatenating all data: {e}")
+        logger.error(f"Error concatenating data: {e}")
+        raise RuntimeError(f"Falied to concatenate data: {e}")
+
+def create_doc_data(
+        split_col: str, 
+        source_file: str,
+        target_file: str
+    ) -> None:
+    """
+    Create data grouped by the specified column (issue or series) 
+    combining all paragraphs into one.
+
+    Parameters:
+    split_col (str): Column name to group by ('issue' or 'series').
+    source_file (str): Path to the source CSV file containing processed data.
+    target_file (str): Path to save the grouped data CSV file.
+    """
+
+    feature_col = 'series' if split_col == 'issue' else 'issue'
+    
+    try:
+        df = pd.read_csv(source_file)
+        doc_df = (
+            df.groupby(split_col).agg({
+                'processed_text': lambda texts: ' '.join(texts), 
+                feature_col: 'first', 'label': 'first'
+            })
+            .reset_index()
+        )
+        doc_df.to_csv(target_file, index=False)
+        logger.info(f"Data grouped by {split_col} saved to {target_file}")
+    except Exception as e:
+        logger.error(f"Error while creating data grouped by {split_col}: {e}")
+        raise RuntimeError(f"Failed to create data: {e}")
