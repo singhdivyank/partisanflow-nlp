@@ -202,13 +202,7 @@ for chunk in pd.read_csv(train_file, chunksize=10000):
 
 **Objective**: aggregate paragraph predictions to issue-level using advanced techniques
 
-**Max Pooling**: selects the paragraph with the highest absolute logit value to reresent each issue. Max-Pooling results-
-
-| Label | Precision | Recall | F1-score |
-| ----- | --------- | ------ | -------- |
-| Democrat |  |  |  |
-| Republican |  |  |  |
-| Overall Accuracy |  |  | ,, |
+**Max Pooling**: selects the paragraph with the highest absolute logit value to reresent each issue. The overall accuracy improved to 0.83
 
 **Majority Voting**: uses top-k paragraphs ranked by absoute logit scores:
 
@@ -337,3 +331,13 @@ Confusion Matrices are plotted to observe series-specific confounding, and is ev
 **Series-Level Split**
 
 ![](visualizations/series_cm.png)
+
+## References
+
+1. Hirano, S., & Snyder Jr, J. M. (2024). Measuring the Partisan Behavior of US Newspapers, 1880 to 1980. The Journal of Economic History, 84(2), 554-592.
+
+2. Lee, B. C. G., et al. (2020). The Newspaper Navigator Dataset: Extracting Headlines and Visual Content from 16 Million Historic Newspaper Pages. ACM CIKM.
+
+3. Dou, S., et al. (2022). Decorrelate Irrelevant, Purify Relevant: Overcome Textual Spurious Correlations from a Feature Perspective. COLING.
+
+4. Torget, A. J. (2022). Mapping Texts: Examining the Effects of OCR Noise on Historical Newspaper Collections. Digitised Newspapers–A New Eldorado for Historians.
