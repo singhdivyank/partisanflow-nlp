@@ -89,17 +89,21 @@ INFERENCE_YEARS = [1870, 1871, 1872, 1873, 1874]
 REFERENCE_YEAR  = 1869
 
 # Drift metric names
-DRIFT_PSI_PROB1          = "psi_prob1"
-DRIFT_KL_PROB1           = "kl_prob1"
-DRIFT_MEAN_PROB1         = "mean_prob1"
-DRIFT_VAR_PROB1          = "var_prob1"
+DRIFT_PSI_PROB0          = "psi_prob_democrat"
+DRIFT_KL_PROB0           = "kl_prob_democrat"
+DRIFT_MEAN_PROB0         = "mean_prob_democrat"
+DRIFT_VAR_PROB0          = "var_prob_democrat"
+DRIFT_PSI_PROB1          = "psi_prob_republican"
+DRIFT_KL_PROB1           = "kl_prob_republican"
+DRIFT_MEAN_PROB1         = "mean_prob_republican"
+DRIFT_VAR_PROB1          = "var_prob_republican"
 DRIFT_HIGH_CONF_FRAC     = "high_confidence_fraction"
 DRIFT_PRED_LABEL_DIST    = "pred_label_distribution"
 
 # Drift thresholds
 PSI_WARNING_THRESHOLD    = 0.1
 PSI_CRITICAL_THRESHOLD   = 0.2
-HIGH_CONF_PROB_THRESHOLD = 0.9
+HIGH_CONF_PROB_THRESHOLD = 0.7
 
 STOPWORDS = ["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", 
 "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", 

@@ -17,22 +17,16 @@ _HERE = Path(__file__).parent
 _LONG_DESC = (_HERE / "README.md").read_text(encoding="utf-8") if (_HERE / "README.md").exists() else ""
 
 _INSTALL_REQUIRES = [
-    # Spark
     # "pyspark==4.1.1",
-    # MLflow
-    "mlflow>=2.13.0",
-    # ML / numeric
-    "scikit-learn>=1.4.0",
-    "numpy>=1.26.0",
-    "pandas>=2.2.0",
-    "scipy>=1.13.0",
-    # Visualisation (used by training evaluate.py)
-    "matplotlib>=3.8.0",
-    # Config / utils
-    "pyyaml>=6.0.1",
-    "python-dotenv>=1.0.1",
-    # Parquet I/O
-    "pyarrow>=14.0.0",
+    "mlflow==3.10.1",
+    "scikit-learn==1.8.0",
+    "numpy==2.4.2",
+    "pandas==2.3.3",
+    "scipy==1.17.1",
+    "matplotlib==3.10.8",
+    "pyyaml==6.0.3",
+    "python-dotenv==1.2.2",
+    # "pyarrow>=14.0.0",
 ]
 
 _EXTRAS = {
@@ -43,7 +37,7 @@ _EXTRAS = {
     ],
     # Airflow orchestration (install on scheduler / worker nodes only)
     "airflow": [
-        "apache-airflow>=2.9.1",
+        "apache-airflow==2.9.0",
         "apache-airflow-providers-apache-spark>=4.9.0",
     ],
     # Development and testing

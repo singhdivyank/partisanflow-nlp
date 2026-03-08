@@ -1,0 +1,31 @@
+# Spark configuration
+
+app_name: "newspaper-partisanship-ml"
+
+master: "yarn"                         # "yarn" on Explorer | "local[*]" for local dev
+
+spark_conf:
+  spark.executor.memory:              "8g"
+  spark.executor.cores:               "4"
+  spark.executor.instances:           "10"
+  spark.driver.memory:                "4g"
+  spark.driver.maxResultSize:         "2g"
+  spark.sql.shuffle.partitions:       "200"
+  spark.default.parallelism:          "200"
+  spark.serializer:                   "org.apache.spark.serializer.KryoSerializer"
+  spark.kryoserializer.buffer.max:    "512m"
+  spark.sql.parquet.compression.codec: "snappy"
+  spark.sql.adaptive.enabled:         "true"
+  spark.sql.adaptive.coalescePartitions.enabled: "true"
+
+# Hadoop / HDFS
+hadoop_conf:
+  fs.defaultFS:  "hdfs://cluster"
+  dfs.replication: "3"
+
+# Write options
+write:
+  mode: "overwrite"                    # overwrite | append
+  partition_cols: ["year"]
+  compression: "snappy"
+  format: "parquet"
