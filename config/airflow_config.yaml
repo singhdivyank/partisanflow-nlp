@@ -1,0 +1,45 @@
+# Airflow DAG configuration
+
+dag:
+  dag_id:       "newspaper_partisanship_pipeline"
+  description:  "End-to-end ML pipeline for tracking newspaper partisanship 1869-1874"
+  schedule:     "@once"
+  start_date:   "2024-01-01"
+  catchup:      false
+  max_active_runs: 1
+  tags:
+    - "nlp"
+    - "partisanship"
+    - "spark"
+
+default_args:
+  owner:            "singh-divyank"
+  retries:          2
+  retry_delay_min:  5
+  email_on_failure: false
+  email_on_retry:   false
+
+# Task timeouts (minutes)
+timeouts:
+  etl:          120
+  features:     90
+  train:        180
+  register:     30
+  inference:    60
+  drift:        30
+  dashboard:    15
+
+# Spark submit operator defaults
+spark_submit:
+  conn_id:       "spark_default"
+  deploy_mode:   "cluster"
+  driver_memory: "4g"
+  executor_memory: "8g"
+  num_executors: 10
+  executor_cores: 4
+  application:   "src/main.py"
+
+# Connections
+connections:
+  spark: "spark_default"
+  hdfs:  "hdfs_default"

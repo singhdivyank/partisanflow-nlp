@@ -1,0 +1,23 @@
+setuptools==82.0.0
+python-dotenv==1.2.2
+pyyaml==6.0.3
+pydantic==2.12.5
+pydantic-settings==2.12.0
+# pyspark==4.1.1
+# pandas==2.3.3
+# numpy==2.4.2
+# scikit-learn==1.8.0
+# scipy==1.17.1
+mlflow==3.10.1
+streamlit>=1.32.0
+# matplotlib==3.10.8
+# seaborn
+plotly>=5.18.0
+apache-airflow==2.9.0
+apache-airflow-providers-apache-spark>=4.0.0
+apache-airflow-providers-apache-hive>=5.0.0
+click>=8.1.0
+loguru>=0.7.0
+tqdm>=4.66.0
+pytest>=8.0.0
+pytest-cov>=4.1.0
