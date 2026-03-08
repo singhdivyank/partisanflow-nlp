@@ -67,7 +67,6 @@ PARTY_MAP = {
 EXCLUDED_SERIES = {"xref", "(no report.)"}
 
 # Table / path names
-FEATURE_STORE_NAME       = "newspaper_features_v1"
 PREDICTIONS_TABLE        = "newspaper_predictions_v1"
 EVAL_PREDICTIONS_TABLE   = "predictions_1869_eval_v1"
 DRIFT_METRICS_TABLE      = "newspaper_drift_metrics_v1"

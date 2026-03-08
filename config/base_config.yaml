@@ -43,7 +43,7 @@ features:
   num_features: 262144
   min_doc_freq: 2
   feature_column: "features"
-  label_column: "issue_label"
+  label_column: "label"
   feature_store_name: "newspaper_features_v1"
   feature_store_version: "v1"
 
@@ -51,7 +51,7 @@ features:
 split:
   train_ratio: 0.8
   test_ratio:  0.2
-  seed: 42
+  seed: 0
   strategy: "group_aware"
 
 # Logging
