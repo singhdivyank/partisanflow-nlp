@@ -1,4 +1,5 @@
 import numpy as np
+from dataclasses import dataclass, field
 from datetime import datetime, UTC
 
 from pyspark.sql import DataFrame, functions as F
@@ -175,3 +176,35 @@ def _label_flip_rate(
     
     flipped = joined.filter(F.col("ref_pred") != F.col("cur_pred")).count()
     return [_row(name="label_flip_rate", value=flipped / total, year=year, model_version=model_version)]
+
+# Alert data structures
+
+@dataclass
+class Alert:
+    level:        str
+    year:         int
+    model_name:   str
+    metric_name:  str
+    metric_value: float
+    threshold:    float
+    message:      str
+    timestamp:    str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+    def to_dict(self) -> dict:
+        return {
+            "level":        self.level,
+            "year":         self.year,
+            "model_name":   self.model_name,
+            "metric_name":  self.metric_name,
+            "metric_value": self.metric_value,
+            "threshold":    self.threshold,
+            "message":      self.message,
+            "timestamp":    self.timestamp,
+        }
+
+    def __str__(self) -> str:
+        return (
+            f"[{self.level}] year={self.year} | model={self.model_name} | "
+            f"{self.metric_name}={self.metric_value:.4f} "
+            f"(threshold={self.threshold}): {self.message}"
+        )

@@ -4,7 +4,7 @@ dag:
   dag_id:       "newspaper_partisanship_pipeline"
   description:  "End-to-end ML pipeline for tracking newspaper partisanship 1869-1874"
   schedule:     "@once"
-  start_date:   "2024-01-01"
+  start_date:   "2024-03-01"
   catchup:      false
   max_active_runs: 1
   tags:
@@ -16,7 +16,7 @@ default_args:
   owner:            "singh-divyank"
   retries:          2
   retry_delay_min:  5
-  email_on_failure: false
+  email_on_failure: true
   email_on_retry:   false
 
 # Task timeouts (minutes)

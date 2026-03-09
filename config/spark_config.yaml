@@ -2,7 +2,7 @@
 
 app_name: "newspaper-partisanship-ml"
 
-master: "yarn"                         # "yarn" on Explorer | "local[*]" for local dev
+master: "yarn"
 
 spark_conf:
   spark.executor.memory:              "8g"

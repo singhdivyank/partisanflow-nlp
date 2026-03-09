@@ -38,7 +38,7 @@ _EXTRAS = {
     # Airflow orchestration (install on scheduler / worker nodes only)
     "airflow": [
         "apache-airflow==2.9.0",
-        "apache-airflow-providers-apache-spark>=4.9.0",
+        "apache-airflow-providers-apache-spark==5.5.1",
     ],
     # Development and testing
     "dev": [
