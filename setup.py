@@ -32,13 +32,13 @@ _INSTALL_REQUIRES = [
 _EXTRAS = {
     # Streamlit dashboard
     "dashboard": [
-        "streamlit>=1.35.0",
-        "plotly>=5.22.0",
+        "streamlit==1.55.0",
+        "plotly==6.6.0",
     ],
     # Airflow orchestration (install on scheduler / worker nodes only)
     "airflow": [
         "apache-airflow==2.9.0",
-        "apache-airflow-providers-apache-spark>=4.9.0",
+        "apache-airflow-providers-apache-spark==5.5.1",
     ],
     # Development and testing
     "dev": [
