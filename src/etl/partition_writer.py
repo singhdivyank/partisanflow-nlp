@@ -49,8 +49,3 @@ def read_partition(spark: SparkSession, base_path: str, year: int) -> DataFrame:
     df = spark.read.parquet(path)
     log.info("Loaded %d rows for year=%d", df.count(), year)
     return df
-
-def write_feature_store(df: DataFrame, base_path: str, year: int) -> None:
-    """Conversation wrapper for writing to the feature store with feature_ts"""
-
-    

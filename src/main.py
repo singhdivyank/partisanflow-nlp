@@ -43,11 +43,18 @@ def run_etl(year: int, cfg: dict) -> None:
     raw_df = ingest(
         spark=spark,
         parquet_path=os.getenv("PARQUET_FILE_PATH"),
-        metadata_path=os.getenv("METADATA_PATH")
+        metadata_path=os.getenv("METADATA_PATH"),
+        label_col=cfg['label_column_metadata'],
+        label_delimiter=['label_delimiter'],
+        labels=cfg['labels']
     )
     
     validate_raw(raw_df, raise_on_error=True)
-    processed_df = transform(df=raw_df, year=year)
+    processed_df = transform(
+        df=raw_df, 
+        year=year, 
+        preprocess_config=paths["preprocessing"]
+    )
     validate_year(
         df=processed_df, 
         year=year, 
@@ -155,7 +162,11 @@ def run_predict(year: int, cfg: dict, model_cfg) -> None:
 
     log.info("PREDICT: year=%d", year)
 
-    feature_df = read_partition(spark=spark, base_path=paths["feature_store"], year=TRAIN_YEAR)
+    feature_df = read_partition(
+        spark=spark, 
+        base_path=paths["feature_store"], 
+        year=TRAIN_YEAR
+    )
     model, version = load_production_model(tracking_uri=mlflow_uri)
     predictions_df = run_predictions(
         model=model,

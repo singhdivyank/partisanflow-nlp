@@ -7,7 +7,7 @@ from typing import Any, Union
 
 import mlflow
 
-from pyspark.sql import DataFrame, functions as F
+from pyspark.sql import DataFrame
 
 from .create_plots import (
     plot_confusion_matrix, 
@@ -16,7 +16,7 @@ from .create_plots import (
 )
 from .evaluate import evaluate_model, _collect_arrays
 from .helper import _BUILDER_MAP
-from src.utils.constants import ALL_MODELS, COL_SERIES
+from src.utils.constants import ALL_MODELS, COL_SERIES, COL_ISSUE
 from src.utils.logger import logging
 
 log = logging.getLogger(__name__)
@@ -104,12 +104,12 @@ def train_all_models(
 def perform_split(df: DataFrame, split_cfg: dict) -> Union[DataFrame, DataFrame]:
     """
     Group-aware train test split: all paragraphs belonging to 
-    same series end up in same split to prevent data leakage.
+    same issue end up in same split to prevent data leakage.
     """
     
-    series_df = df.select(COL_SERIES).distinct()
+    series_df = df.select(COL_ISSUE).distinct()
     series_train, series_test = series_df.randomSplit(
-        [split_cfg.get("train_ratio"), split_cfg.get("test_ratio")],
+        weights=[split_cfg.get("train_ratio"), split_cfg.get("test_ratio")],
         seed=split_cfg.get("seed")
     )
 

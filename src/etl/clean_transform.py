@@ -19,7 +19,7 @@ from src.utils.logger import logging
 
 log = logging.getLogger(__name__)
 
-def _clean_paragraph(text: str, min_word_len: int = 4) -> str:
+def _clean_paragraph(text: str, min_word_len) -> str:
     """clean a single paragraph string"""
 
     if not text or text.strip():
@@ -52,22 +52,26 @@ def _final_clean(paragraph: str) -> str:
     parts = [p.strip() for p in paragraph.split(",") if p.strip()]
     return ", ".join(parts)
 
-def split_into_paragraphs(df: DataFrame) -> DataFrame:
+def split_into_paragraphs(df: DataFrame, separator: str) -> DataFrame:
     """Explode text column into one row per paragraph"""
 
-    df = df.withColumn("_paragraphs", F.split(F.col(COL_TEXT), "\n\n"))
+    df = df.withColumn("_paragraphs", F.split(F.col(COL_TEXT), separator))
     df = df.withColumn("_raw_para", F.explode(F.col("_paragraphs")))
     df = df.drop("_paragraphs", COL_TEXT)
     df = df.withColumn(COL_PARAGRAPH_ID, F.monotonically_increasing_id())
     df = df.withColumnRenamed("_raw_para", COL_TEXT)
     return df
 
-def clean_paragraphs(df: DataFrame, min_word_len: int = 4) -> DataFrame:
+def clean_paragraphs(
+    df: DataFrame, 
+    min_word_len: int, 
+    min_para_words: int
+) -> DataFrame:
     """Apply text cleaning UDF to each paragraph row"""
 
     log.info(
         "Cleaning paragraphs (min_word_len=%d, min_paragraph_words=%d)",
-        min_word_len, 100
+        min_word_len, min_para_words
     )
 
     clean_udf = _make_clean_udf(min_word_len)
@@ -77,16 +81,27 @@ def clean_paragraphs(df: DataFrame, min_word_len: int = 4) -> DataFrame:
 
     df = df.filter(
         F.col(COL_CLEANED).isNotNull()
-        & (F.size(F.split(F.col(COL_CLEANED), r"\s+")) > 100)
+        & (F.size(F.split(F.col(COL_CLEANED), r"\s+")) > min_para_words)
     )
     
-    log.info("Paragraphs retained after cleaning (word count > 100): %d", df.count())
+    log.info(
+        "Paragraphs retained after cleaning (word count > %d): %d", 
+        min_para_words, df.count()
+    )
     return df
 
-def transform(df: DataFrame, year: int) -> DataFrame:
+def transform(
+    df: DataFrame, 
+    year: int, 
+    preprocess_config: dict
+) -> DataFrame:
     """Full pipeline for one year's data"""
     
     df = df.withColumn(COL_YEAR, F.lit(year).cast(T.IntegerType()))
-    df = split_into_paragraphs(df)
-    df = clean_paragraphs(df, min_word_len=4)
+    df = split_into_paragraphs(df, separator=preprocess_config["paragraph_separator"])
+    df = clean_paragraphs(
+        df, 
+        min_word_len=preprocess_config["min_word_length"], 
+        min_para_words=preprocess_config["min_paragraph_words"]
+    )
     return df
