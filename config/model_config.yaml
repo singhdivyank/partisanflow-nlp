@@ -1,6 +1,6 @@
 # Model configuration
 mlflow:
-  tracking_uri:    "http://localhost:5000"    # override via MLFLOW_TRACKING_URI env var
+  tracking_uri:    "file:./mlruns"    # MLFLOW_TRACKING_URI
   experiment_name: "newspaper_partisanship"
   registry_name:   "newspaper_partisanship_classifier"
   promotion_thresholds:

@@ -2,14 +2,19 @@
 
 app_name: "newspaper-partisanship-ml"
 
-master: "yarn"
+master: "spark://c3086:7077"
 
 spark_conf:
-  spark.executor.memory:              "8g"
-  spark.executor.cores:               "4"
+  spark.driver.memory:                "40g"
+  # spark.driver.maxResultSize:         "2g"
+  spark.executor.memory:              "40g"
+  spark.executor.cores:               "5"
   spark.executor.instances:           "10"
-  spark.driver.memory:                "4g"
-  spark.driver.maxResultSize:         "2g"
+  spark.reducer.maxReqsInFlight:      "1"
+  spark.reducer.maxBlocksInFlightPerAddress: "5"
+  spark.shuffle.io.retryWait:         "120s"
+  spark.shuffle.io.maxRetries:        "10"
+  spark.excludeOnFailure.enabled:     "true"
   spark.sql.shuffle.partitions:       "200"
   spark.default.parallelism:          "200"
   spark.serializer:                   "org.apache.spark.serializer.KryoSerializer"
