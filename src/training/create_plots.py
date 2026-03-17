@@ -1,6 +1,7 @@
 """Create plots for evaluation metrics"""
 
 from pathlib import Path
+from typing import List
 
 import matplotlib
 matplotlib.use("Agg")
@@ -68,3 +69,23 @@ def plot_pr(y_true, y_scores, model_name: str, num_classes: int) -> Path:
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     return path
+
+def plot_curves(
+    collected_arrays: List, 
+    has_probability: bool, 
+    model_name: str
+) -> List:
+    curve_paths = []
+    
+    y_true, y_pred, y_scores = collected_arrays[0], collected_arrays[1], collected_arrays[-1]
+    cm_path = plot_confusion_matrix(y_true, y_pred, model_name)
+    curve_paths.append(str(cm_path))
+
+    if has_probability and y_scores is not None:
+        num_cls = y_scores.shape[1]
+        roc_path = plot_roc(y_true, y_scores, model_name, num_cls)
+        pr_path = plot_pr(y_true, y_scores, model_name, num_cls)
+        curve_paths.append(str(roc_path))
+        curve_paths.append(str(pr_path))
+    
+    return curve_paths

@@ -3,20 +3,24 @@ Model training endpoint.
 Builds Spark ML classifier pipelines, perform train_test split, trains all enabled models.
 """
 
-from typing import Any, Union
+from typing import Any, List, Union
 
 import mlflow
+import numpy as np
 
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, functions as F, types as T
 
-from .create_plots import (
-    plot_confusion_matrix, 
-    plot_pr, 
-    plot_roc
-)
-from .evaluate import evaluate_model, _collect_arrays
+from .evaluate import evaluate_model
 from .helper import _BUILDER_MAP
-from src.utils.constants import ALL_MODELS, COL_SERIES, COL_ISSUE
+from .create_plots import plot_curves
+from src.utils.constants import (
+    ALL_MODELS, 
+    COL_ISSUE,
+    COL_PREDICTION,
+    COL_PROBABILITY,
+    COL_RAW_LABEL,
+    COL_SERIES, 
+)
 from src.utils.logger import logging
 
 log = logging.getLogger(__name__)
@@ -29,18 +33,20 @@ def _log_info(model_name: str, run_id: Any, param_items: list):
     for k, v in param_items:
         mlflow.log_param(k, v)
 
-def plot_curves(predictions: DataFrame, has_probability: bool, model_name: str):
-    _collected_arrays = _collect_arrays(predictions)
-    y_true, y_pred, y_scores = _collected_arrays[0], _collected_arrays[1], _collected_arrays[-1]
-    cm_path = plot_confusion_matrix(y_true, y_pred, model_name)
-    mlflow.log_artifact(str(cm_path))
+def _collect_arrays(predictions: DataFrame) -> List[np.array]:
+    """Collect y_true, y_pred, and probability scores to driver"""
 
-    if has_probability and y_scores is not None:
-        num_cls = y_scores.shape[1]
-        roc_path = plot_roc(y_true, y_scores, model_name, num_cls)
-        pr_path = plot_pr(y_true, y_scores, model_name, num_cls)
-        mlflow.log_artifact(str(roc_path))
-        mlflow.log_artifact(str(pr_path))
+    y_true = predictions.select(COL_RAW_LABEL).rdd.flatMap(lambda x: x).collect()
+    y_pred = predictions.select(COL_PREDICTION).rdd.flatMap(lambda x: x).collect()
+    y_scores = None
+
+    if COL_PROBABILITY in predictions.columns:
+        v2arr = F.udf(lambda v: v.toArray().toList(), T.ArrayType(T.DoubleType()))
+        prob_df = predictions.withColumn("_prob_arr", v2arr(F.col(COL_PROBABILITY)))
+        rows = prob_df.select("_prob_arr").toPandas()
+        y_scores = np.array(rows["_prob_arr"].tolist())
+    
+    return [np.array(y_true), np.array(y_pred), y_scores]
 
 def train_all_models(
     model_cfg: dict, 
@@ -82,7 +88,15 @@ def train_all_models(
                 has_probability=has_probability
             )
             
-            plot_curves(predictions, has_probability, model_name)
+            collected_arrays = _collect_arrays(predictions)
+            curve_paths = plot_curves(
+                collected_arrays=collected_arrays, 
+                has_probability=has_probability, 
+                model_name=model_name
+            )
+            mlflow.log_artifact(curve_paths[0])
+            mlflow.log_artifact(curve_paths[1])
+            mlflow.log_artifact(curve_paths[-1])
             
             for metric_name, value in eval_metrics.items():
                 if isinstance(value, (int, float)):
