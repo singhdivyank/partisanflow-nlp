@@ -2,7 +2,7 @@
 
 app_name: "newspaper-partisanship-ml"
 
-master: "spark://c3086:7077"
+# master: "spark://c3086:7077"
 
 spark_conf:
   spark.driver.memory:                "40g"
@@ -24,9 +24,9 @@ spark_conf:
   spark.sql.adaptive.coalescePartitions.enabled: "true"
 
 # Hadoop / HDFS
-hadoop_conf:
-  fs.defaultFS:  "hdfs://cluster"
-  dfs.replication: "3"
+# hadoop_conf:
+#   fs.defaultFS:  "file:///"
+#   dfs.replication: "3"
 
 # Write options
 write:

@@ -3,9 +3,9 @@
 from pyspark.sql import DataFrame, functions as F, SparkSession
 
 from src.utils.constants import COL_INGESTION_TS, COL_YEAR
-from src.utils.logger import logging
+from src.utils.logger import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 def write_partition(
     df: DataFrame, 
@@ -30,10 +30,11 @@ def write_partition(
         year, base_path, mode, compression
     )
 
+    df = df.repartition(200, F.col(COL_YEAR))
+
     (
         df.write
         .option("compression", compression)
-        .option("partitionOverwriteMode", "dynamic")
         .partitionBy(*partition_cols)
         .mode(mode)
         .parquet(base_path)
@@ -41,11 +42,23 @@ def write_partition(
 
     log.info("Successfully wrote year=%d to %s", year, base_path)
 
-def read_partition(spark: SparkSession, base_path: str, year: int) -> DataFrame:
+def read_partition(
+    spark: SparkSession, 
+    base_path: str, 
+    year: int
+) -> DataFrame:
     """Read specific year partition from Parquet store"""
 
     path = f"{base_path}/year={year}"
+    
     log.info("Reading partition from %s", path)
+    
     df = spark.read.parquet(path)
-    log.info("Loaded %d rows for year=%d", df.count(), year)
+    
+    log.info(
+        "Loaded partition for year=%d from %s", 
+        year,
+        path
+    )
+    
     return df

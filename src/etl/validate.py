@@ -8,25 +8,33 @@ from src.utils.constants import (
     COL_ISSUE,
     COL_SERIES,
     COL_PARAGRAPH_ID,
-    TRAIN_LABELS
 )
-from src.utils.logger import logging
+from src.utils.logger import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
-def compute_basic_stats(df: DataFrame, year: int) -> dict:
+def compute_basic_stats(df: DataFrame, year: int) -> dict[str, object]:
     """Compute and log basic stats for a year's processed DataFrame to be logged to MLflow"""
 
     stats = {}
 
+    agg = df.agg(
+        F.count("*").alias("row_count"),
+        F.countDistinct(COL_SERIES).alias("distinct_series"),
+        F.countDistinct(COL_SERIES, COL_ISSUE).alias("distinct_issues"),
+    ).first()
+
     stats["year"] = year
-    stats["row_count"] = df.count()
-    stats["distinct_series"] = df.select(COL_SERIES).distinct().count()
-    stats["distinct_issues"] = df.select(COL_SERIES, COL_ISSUE).distinct().count()
+    stats["row_count"] = agg["row_count"]
+    stats["distinct_series"] = agg["distinct_series"]
+    stats["distinct_issues"] = agg["distinct_issues"]
 
     log.info(
         "[validate | year=%d] rows=%d, series=%d, issues=%d",
-        year, stats["row_count"], stats["distince_series"], stats["distinct_issues"]
+        year, 
+        stats["row_count"], 
+        stats["distinct_series"], 
+        stats["distinct_issues"]
     )
 
     for col in [COL_SERIES, COL_ISSUE, COL_PARAGRAPH_ID]:
@@ -62,14 +70,14 @@ def get_para_len_stats(df: DataFrame) -> dict:
     min_len, max_len, avg_len = 0, 0, 0
 
     if COL_CLEANED in df.columns:
-        length_stats = df.select(
+        agg_len = df.agg(
             F.min(F.length(COL_CLEANED)).alias("min_length"),
             F.max(F.length(COL_CLEANED)).alias("max_length"),
             F.avg(F.length(COL_CLEANED)).alias("avg_len")
         ).first()
-        min_len = length_stats.min_len
-        max_len = length_stats.max_len
-        avg_len = round(length_stats.avg_len, 1)
+        min_len = agg_len["min_length"]
+        max_len = agg_len["max_length"]
+        avg_len = round(agg_len["avg_len"], 1)
     
     if max_len > 50_000:
         log.warning("Extreme paragraph length detected: %d chars.", max_len)
@@ -109,7 +117,8 @@ def check_train_labels_present(df: DataFrame, year: int) -> bool:
     if COL_RAW_LABEL not in df.columns:
         log.error(
             "[validate | year=%d] Label column '%s' not found.", 
-            year, COL_RAW_LABEL
+            year, 
+            COL_RAW_LABEL
         )
         return False
     
@@ -117,12 +126,13 @@ def check_train_labels_present(df: DataFrame, year: int) -> bool:
         row[COL_RAW_LABEL]
         for row in df.select(COL_RAW_LABEL).distinct().collect()
     }
-    missing = [lbl for lbl in TRAIN_LABELS if lbl not in present]
+    missing = [lbl for lbl in [0, 1] if lbl not in present]
 
     if missing:
         log.error(
             "[validate | year=%d] Training labels %s not found in data.", 
-            year, missing
+            year, 
+            missing
         )
         return False
     
@@ -133,11 +143,11 @@ def validate_year(
     df: DataFrame, 
     year: int, 
     is_training: bool = False
-) -> dict:
+) -> bool:
     """Orchestrate quality checks for a year"""
 
-    stats = compute_basic_stats(df, year)
     ok = True
+    stats = compute_basic_stats(df, year)
 
     if not stats["row_count"]:
         log.error("[validate | year=%d] DataFrame is empty", year)
@@ -150,4 +160,4 @@ def validate_year(
     if not ok:
         raise ValueError(f"Data validation failed for year={year}. See logs for details.")
 
-    return stats
+    return ok

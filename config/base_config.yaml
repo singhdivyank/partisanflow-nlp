@@ -41,7 +41,7 @@ preprocessing:
 features:
   vectorizer: "hashing_tf_idf"
   num_features: 262144
-  min_doc_freq: 2
+  min_doc_freq: 5
   feature_column: "features"
   label_column: "label"
   feature_store_name: "newspaper_features_v1"

@@ -45,22 +45,30 @@ def run_etl(year: int, cfg: dict) -> None:
         parquet_path=os.getenv("PARQUET_FILE_PATH"),
         metadata_path=os.getenv("METADATA_PATH"),
         label_col=cfg['label_column_metadata'],
-        label_delimiter=['label_delimiter'],
+        label_delimiter=cfg['label_delimiter'],
         labels=cfg['labels']
     )
     
-    validate_raw(raw_df, raise_on_error=True)
+    validated = validate_raw(raw_df, raise_on_error=True)
+    if not validated:
+        log.warning("Raw data invalidated")
+        return
+    
     processed_df = transform(
         df=raw_df, 
         year=year, 
-        preprocess_config=paths["preprocessing"]
+        preprocess_config=cfg["preprocessing"]
     )
-    validate_year(
+    year_validated = validate_year(
         df=processed_df, 
         year=year, 
         is_training=(year == TRAIN_YEAR)
     )
+    if not year_validated:
+        log.warning("Year validation failed")
+        return
     
+    log.info("Validation successfully completed. No. of issues: %d", 0)
     write_partition(df=processed_df, base_path=paths["processed_base"], year=year)
     log.info("ETL complete for year=%d", year)
 

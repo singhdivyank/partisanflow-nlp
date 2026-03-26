@@ -19,11 +19,11 @@ _LONG_DESC = (_HERE / "README.md").read_text(encoding="utf-8") if (_HERE / "READ
 _INSTALL_REQUIRES = [
     "pyspark==4.1.1",
     "mlflow==3.10.1",
-    "scikit-learn==1.4.2",
-    "numpy==1.26.4",
+    "scikit-learn==1.8.0",
+    "numpy==2.4.3",
     "pandas==2.3.3",
-    "scipy==1.13.1",
-    "matplotlib==3.8.4",
+    "scipy==1.17.1",
+    "matplotlib==3.10.8",
     "seaborn==0.13.2"
     "pyyaml==6.0.3",
     "python-dotenv==1.2.2",
@@ -34,21 +34,21 @@ _EXTRAS = {
     # Streamlit dashboard
     "dashboard": [
         "streamlit==1.55.0",
-        "plotly==5.24.1",
+        # "plotly==5.24.1",
     ],
     # Airflow orchestration (install on scheduler / worker nodes only)
-    "airflow": [
-        "apache-airflow==2.11.0",
-        "apache-airflow-providers-apache-spark==5.5.1",
-    ],
+    # "airflow": [
+    #     "apache-airflow==2.11.0",
+    #     "apache-airflow-providers-apache-spark==5.5.1",
+    # ],
     # Development and testing
     "dev": [
         "pytest>=8.2.0",
         "pytest-mock>=3.14.0",
         "pytest-cov>=5.0.0",
-        "black>=24.0.0",
-        "ruff>=0.4.0",
-        "mypy>=1.10.0",
+        # "black>=24.0.0",
+        # "ruff>=0.4.0",
+        # "mypy>=1.10.0",
     ],
 }
 
@@ -96,8 +96,7 @@ setup(
     # Classifiers
     classifiers=[
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.13",
         "Intended Audience :: Science/Research",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Operating System :: OS Independent",

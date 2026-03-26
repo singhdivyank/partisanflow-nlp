@@ -1,7 +1,6 @@
 from .clean_transform import (
     _clean_paragraph, 
-    _make_clean_udf,
-    _final_clean, 
+    make_clean_paragraphs_udf,
     split_into_paragraphs, 
     clean_paragraphs, 
     transform
@@ -19,8 +18,7 @@ from .validate import (
 
 __all__ = [
     "_clean_paragraph", 
-    "_make_clean_udf",
-    "_final_clean", 
+    "make_clean_paragraphs_udf",
     "split_into_paragraphs", 
     "clean_paragraphs", 
     "transform",

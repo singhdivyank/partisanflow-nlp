@@ -6,9 +6,9 @@ from src.utils.constants import (
     COL_CONTENTS,
     COL_DATE,
     COL_ISSUE,
+    COL_RAW_LABEL,
     COL_SERIES,
     COL_TEXT,
-    COL_RAW_LABEL,
     EXCLUDED_SERIES,
     TRAIN_YEAR,
 )
@@ -31,11 +31,15 @@ def read_parquet(spark: SparkSession, path: str, year: int) -> DataFrame:
     DataFrame with columns: series_id, issue_id, date, text
     """
 
-    log.info("Reading raw Parquet from %s, filtering year=%d", path, year)
+    log.info(
+        "Reading raw Parquet from %s, filtering year=%d", 
+        path, 
+        year
+    )
     
     df = (
         spark.read.parquet(path)
-        .filter(F.year(F.col(COL_DATE))==1869)
+        .filter((F.col(COL_DATE)>='1869') & (F.col(COL_DATE)<'1870'))
         .select(COL_SERIES, COL_ISSUE, COL_DATE, COL_TEXT)
     )
     
