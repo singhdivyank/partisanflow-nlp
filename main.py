@@ -43,17 +43,32 @@ def run_etl(year: int, cfg: dict) -> None:
     raw_df = ingest(
         spark=spark,
         parquet_path=os.getenv("PARQUET_FILE_PATH"),
-        metadata_path=os.getenv("METADATA_PATH")
+        metadata_path=os.getenv("METADATA_PATH"),
+        label_col=cfg['label_column_metadata'],
+        label_delimiter=cfg['label_delimiter'],
+        labels=cfg['labels']
     )
     
-    validate_raw(raw_df, raise_on_error=True)
-    processed_df = transform(df=raw_df, year=year)
-    validate_year(
+    validated = validate_raw(raw_df, raise_on_error=True)
+    if not validated:
+        log.warning("Raw data invalidated")
+        return
+    
+    processed_df = transform(
+        df=raw_df, 
+        year=year, 
+        preprocess_config=cfg["preprocessing"]
+    )
+    year_validated = validate_year(
         df=processed_df, 
         year=year, 
         is_training=(year == TRAIN_YEAR)
     )
+    if not year_validated:
+        log.warning("Year validation failed")
+        return
     
+    log.info("Validation successfully completed. No. of issues: %d", 0)
     write_partition(df=processed_df, base_path=paths["processed_base"], year=year)
     log.info("ETL complete for year=%d", year)
 
@@ -155,7 +170,11 @@ def run_predict(year: int, cfg: dict, model_cfg) -> None:
 
     log.info("PREDICT: year=%d", year)
 
-    feature_df = read_partition(spark=spark, base_path=paths["feature_store"], year=TRAIN_YEAR)
+    feature_df = read_partition(
+        spark=spark, 
+        base_path=paths["feature_store"], 
+        year=TRAIN_YEAR
+    )
     model, version = load_production_model(tracking_uri=mlflow_uri)
     predictions_df = run_predictions(
         model=model,

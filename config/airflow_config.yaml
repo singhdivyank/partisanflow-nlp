@@ -33,10 +33,10 @@ timeouts:
 spark_submit:
   conn_id:       "spark_default"
   deploy_mode:   "cluster"
-  driver_memory: "4g"
-  executor_memory: "8g"
+  driver_memory: "40g"
+  executor_memory: "40g"
   num_executors: 10
-  executor_cores: 4
+  executor_cores: 5
   application:   "src/main.py"
 
 # Connections

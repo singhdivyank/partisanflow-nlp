@@ -6,14 +6,10 @@ from src.utils.constants import (
     COL_CONTENTS,
     COL_DATE,
     COL_ISSUE,
+    COL_RAW_LABEL,
     COL_SERIES,
     COL_TEXT,
-    COL_RAW_LABEL,
     EXCLUDED_SERIES,
-    LABEL_DEMOCRATIC,
-    LABEL_INDEPENDENT, 
-    LABEL_REPUBLICAN,
-    LABEL_OTHER,
     TRAIN_YEAR,
 )
 from src.utils.logger import get_logger
@@ -35,18 +31,28 @@ def read_parquet(spark: SparkSession, path: str, year: int) -> DataFrame:
     DataFrame with columns: series_id, issue_id, date, text
     """
 
-    log.info("Reading raw Parquet from %s, filtering year=%d", path, year)
+    log.info(
+        "Reading raw Parquet from %s, filtering year=%d", 
+        path, 
+        year
+    )
     
     df = (
         spark.read.parquet(path)
-        .filter(F.year(F.col(COL_DATE))==1869)
+        .filter((F.col(COL_DATE)>='1869') & (F.col(COL_DATE)<'1870'))
         .select(COL_SERIES, COL_ISSUE, COL_DATE, COL_TEXT)
     )
     
     log.info("Raw Parquet rows for year=%d: %d", year, df.count())
     return df
 
-def read_metadata(spark: SparkSession, path: str) -> DataFrame:
+def read_metadata(
+    spark: SparkSession, 
+    path: str,
+    label_col: str, 
+    delimiter: str,
+    labels: dict
+) -> DataFrame:
     """
     Read the metadata CSV and assign numeric party labels.
 
@@ -70,17 +76,17 @@ def read_metadata(spark: SparkSession, path: str) -> DataFrame:
         spark.read.csv(path, header=True, inferSchema=True)
         .select(COL_CONTENTS, COL_SERIES)
         .dropna(subset=[COL_SERIES])
-        .filter(~F.col(COL_SERIES).isin(list(EXCLUDED_SERIES)))
-        .filter(~F.col(COL_SERIES).isin(list(EXCLUDED_SERIES)))
+        .filter(~F.col(COL_SERIES).isin(EXCLUDED_SERIES))
+        .filter(~F.col(COL_SERIES).isin(EXCLUDED_SERIES))
     )
 
-    contents_arr = F.split(F.col(COL_CONTENTS), '; ')
+    contents_arr = F.split(F.col(label_col), delimiter)
     df = df.withColumn(
         COL_RAW_LABEL,
-        F.when(F.array_contains(contents_arr, "democratic"), LABEL_DEMOCRATIC)
-        .when(F.array_contains(contents_arr, "republican"), LABEL_REPUBLICAN)
-        .when(F.array_contains(contents_arr, "independent"), LABEL_INDEPENDENT)
-        .otherwise(LABEL_OTHER),
+        F.when(F.array_contains(contents_arr, "democratic"), labels['democratic'])
+        .when(F.array_contains(contents_arr, "republican"), labels['republican'])
+        .when(F.array_contains(contents_arr, "independent"), labels['independent'])
+        .otherwise(labels['other']),
     )
 
     df = df.select(
@@ -96,6 +102,9 @@ def ingest(
     spark: SparkSession,
     parquet_path: str,
     metadata_path: str,
+    label_col: str,
+    label_delimiter: str,
+    labels: dict,
     year: int = TRAIN_YEAR
 ) -> DataFrame:
     """
@@ -104,10 +113,18 @@ def ingest(
     """
 
     raw_df = read_parquet(spark=spark, path=parquet_path, year=year)
-    metadata_df = read_metadata(spark=spark, path=metadata_path)
+    metadata_df = read_metadata(
+        spark=spark, 
+        path=metadata_path, 
+        label_col=label_col, 
+        delimiter=label_delimiter,
+        labels=labels
+    )
     
     log.info("Joining raw data with metadata on '%s'", COL_SERIES)
 
     joined_df = raw_df.join(metadata_df, on=COL_SERIES, how="inner")
+    joined_df = joined_df.filter(joined_df["label"].isin(labels["train_labels"]))
+
     log.info("Rows after inner join: %d", joined_df.count())
     return joined_df

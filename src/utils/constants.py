@@ -24,20 +24,12 @@ COL_RAW_LABEL    = "label"
 
 # Processed / feature columns
 COL_PARAGRAPH_ID  = "paragraph_id"
-COL_PARAGRAPHS    = "paragraphs"
 COL_CLEANED       = "cleaned_paragraph"
 COL_WORDS         = "words"
 COL_RAW_FEATURES  = "rawFeatures"
 COL_FEATURES      = "features"
 COL_INGESTION_TS  = "ingestion_ts"
 COL_FEATURE_TS    = "feature_ts"
-
-# Label values
-LABEL_DEMOCRATIC  = 0.0
-LABEL_REPUBLICAN  = 1.0
-LABEL_INDEPENDENT = 2.0
-LABEL_OTHER       = 3.0
-TRAIN_LABELS      = [LABEL_DEMOCRATIC, LABEL_REPUBLICAN]
 
 # Prediction columns
 COL_PRED_LABEL    = "pred_label"
@@ -49,7 +41,6 @@ COL_RAW_PRED      = "rawPrediction"
 COL_MODEL_NAME    = "model_name"
 COL_MODEL_VERSION = "model_version"
 COL_PRED_TS       = "prediction_ts"
-COL_RUN_ID        = "run_id"
 
 # Drift columns
 COL_REF_YEAR      = "ref_year"
@@ -57,19 +48,8 @@ COL_METRIC_NAME   = "metric_name"
 COL_METRIC_VALUE  = "metric_value"
 COL_COMPUTED_TS   = "computed_ts"
 
-PARTY_MAP = {
-    "democratic":  LABEL_DEMOCRATIC,
-    "republican":  LABEL_REPUBLICAN,
-    "independent": LABEL_INDEPENDENT,
-}
-
 # Excluded series identifiers
-EXCLUDED_SERIES = {"xref", "(no report.)"}
-
-# Table / path names
-PREDICTIONS_TABLE        = "newspaper_predictions_v1"
-EVAL_PREDICTIONS_TABLE   = "predictions_1869_eval_v1"
-DRIFT_METRICS_TABLE      = "newspaper_drift_metrics_v1"
+EXCLUDED_SERIES = ["xref", "(no report.)"]
 
 # MLflow
 MLFLOW_REGISTRY_NAME     = "newspaper_partisanship_classifier"

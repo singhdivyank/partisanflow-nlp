@@ -1,17 +1,13 @@
 """Model evaluation: compute classification metrics"""
 
-import numpy as np
-from typing import List
-
 from pyspark.ml.evaluation import (
     BinaryClassificationEvaluator,
     MulticlassClassificationEvaluator
 )
-from pyspark.sql import DataFrame, functions as F, types as T
+from pyspark.sql import DataFrame
 
 from src.utils.constants import (
     COL_PREDICTION, 
-    COL_PROBABILITY, 
     COL_RAW_LABEL, 
     COL_RAW_PRED
 )
@@ -51,21 +47,6 @@ def _binary_metrics(predictions: DataFrame) -> dict:
             log.warning("Could not compute binary metric '%s': '%s'", metric_name, e)
     
     return metrics
-
-def _collect_arrays(predictions: DataFrame) -> List[np.array]:
-    """Collect y_true, y_pred, and probability scores to driver"""
-
-    y_true = predictions.select(COL_RAW_LABEL).rdd.flatMap(lambda x: x).collect()
-    y_pred = predictions.select(COL_PREDICTION).rdd.flatMap(lambda x: x).collect()
-    y_scores = None
-
-    if COL_PROBABILITY in predictions.columns:
-        v2arr = F.udf(lambda v: v.toArray().toList(), T.ArrayType(T.DoubleType()))
-        prob_df = predictions.withColumn("_prob_arr", v2arr(F.col(COL_PROBABILITY)))
-        rows = prob_df.select("_prob_arr").toPandas()
-        y_scores = np.array(rows["_prob_arr"].tolist())
-    
-    return [np.array(y_true), np.array(y_pred), y_scores]
 
 def evaluate_model(
     predictions: DataFrame, 

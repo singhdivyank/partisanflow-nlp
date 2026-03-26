@@ -4,21 +4,22 @@ import json
 from pathlib import Path
 
 from pyspark.sql import DataFrame, functions as F, types as T
+from pyspark.ml.linalg import VectorUDT
 
 from src.utils.constants import (
     COL_DATE,
     COL_FEATURES,
     COL_ISSUE,
-    COL_LABEL,
+    COL_RAW_LABEL,
     COL_SERIES,
     COL_TEXT,
     COL_YEAR,
     COL_PARAGRAPH_ID,
     COL_PRED_LABEL
 )
-from src.utils.logger import logging
+from src.utils.logger import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _EXPECTATIONS_PATH = Path(__file__).parent / "expectations.json"
 
@@ -42,7 +43,7 @@ PROCESSED_SCHEMA = T.StructType([
     T.StructField(COL_YEAR,         T.IntegerType(), nullable=False),
     T.StructField(COL_PARAGRAPH_ID, T.LongType(),   nullable=False),
     T.StructField(COL_TEXT,         T.StringType(), nullable=True),
-    T.StructField(COL_LABEL,        T.DoubleType(), nullable=True),
+    T.StructField(COL_RAW_LABEL,        T.DoubleType(), nullable=True),
 ])
 
 FEATURE_STORE_SCHEMA = T.StructType([
@@ -50,8 +51,8 @@ FEATURE_STORE_SCHEMA = T.StructType([
     T.StructField(COL_ISSUE,        T.StringType(), nullable=False),
     T.StructField(COL_YEAR,         T.IntegerType(), nullable=False),
     T.StructField(COL_PARAGRAPH_ID, T.LongType(),   nullable=False),
-    T.StructField(COL_FEATURES,     T.VectorUDT(),  nullable=False),
-    T.StructField(COL_LABEL,        T.DoubleType(), nullable=True),
+    T.StructField(COL_FEATURES,     VectorUDT(),  nullable=False),
+    T.StructField(COL_RAW_LABEL,        T.DoubleType(), nullable=True),
 ])
 
 # Helpers
@@ -71,14 +72,28 @@ def _check_required_columns(df: DataFrame, required: list[str], stage: str) -> l
 
 def _check_nulls(df: DataFrame, not_null_cols: list[str], stage: str) -> dict:
     """Returns {col: null_count} for any column that has nulls."""
+    cols = [col for col in not_null_cols if col in df.columns]
+    if not cols:
+        return {}
+    
+    agg_exprs = [
+        F.sum(F.when(F.col(col).isNull(), 1).otherwise(0)).alias(col)
+        for col in cols
+    ]
+
+    row = df.agg(*agg_exprs).first()
+
     results = {}
-    for col in not_null_cols:
-        if col not in df.columns:
-            continue
-        n = df.filter(F.col(col).isNull()).count()
-        if n > 0:
-            log.warning("[%s] Column '%s' has %d null(s).", stage, col, n)
-            results[col] = n
+    for _col in cols:
+        n = row[_col]
+        if n and n > 0:
+            log.warning(
+                "[%s] Column '%s' has %d null(s).", 
+                stage, 
+                _col, 
+                n
+            )
+            results[_col] = n
     return results
 
 def _check_label_distribution(df: DataFrame, label_col: str, stage: str) -> None:
@@ -87,13 +102,21 @@ def _check_label_distribution(df: DataFrame, label_col: str, stage: str) -> None
     dist = df.groupBy(label_col).count().orderBy(label_col)
     log.info("[%s] Label distribution:", stage)
     for row in dist.collect():
-        log.info("  label=%.1f  count=%d", row[label_col], row["count"])
+        log.info(
+            "  label=%.1f  count=%d", 
+            row[label_col],
+            row["count"]
+        )
 
-def _check_row_count(df: DataFrame, min_rows: int, stage: str) -> bool:
-    n = df.count()
-    log.info("[%s] Row count: %d", stage, n)
-    if n < min_rows:
-        log.error("[%s] Row count %d below minimum %d.", stage, n, min_rows)
+def _check_row_count(row_count, min_rows: int, stage: str) -> bool:
+    log.info("[%s] Row count: %d", stage, row_count)
+    if row_count < min_rows:
+        log.error(
+            "[%s] Row count %d below minimum %d.", 
+            stage, 
+            row_count, 
+            min_rows
+        )
         return False
     return True
 
@@ -105,6 +128,8 @@ def validate_raw(df: DataFrame, raise_on_error: bool = False) -> bool:
     exp   = _load_expectations().get(stage, {})
     ok    = True
 
+    log.info("Validating Raw Data")
+
     missing = _check_required_columns(
         df,
         [COL_SERIES, COL_ISSUE, COL_TEXT],
@@ -113,16 +138,28 @@ def validate_raw(df: DataFrame, raise_on_error: bool = False) -> bool:
     if missing:
         ok = False
 
-    null_report = _check_nulls(df, [COL_SERIES, COL_ISSUE, COL_TEXT], stage)
+    log.info("Missing column check completed")
+    
+    null_report = _check_nulls(
+        df, 
+        [COL_SERIES, COL_ISSUE, COL_TEXT], 
+        stage
+    )
     if null_report:
         ok = False
 
+    log.info("Generated null report")
+
     min_rows = exp.get("min_row_count", 1)
-    if not _check_row_count(df, min_rows, stage):
+    n = df.count()
+    if not _check_row_count(n, min_rows, stage):
         ok = False
+
+    log.info("Completed row count check")
 
     if not ok and raise_on_error:
         raise ValueError(f"[{stage}] Validation failed. See logs for details.")
+    
     return ok
 
 
@@ -132,6 +169,7 @@ def validate_processed(df: DataFrame, raise_on_error: bool = False) -> bool:
     exp   = _load_expectations().get(stage, {})
     ok    = True
 
+    log.info("Validating Processed Data")
     missing = _check_required_columns(
         df,
         [COL_SERIES, COL_ISSUE, COL_YEAR, COL_PARAGRAPH_ID],
@@ -140,7 +178,7 @@ def validate_processed(df: DataFrame, raise_on_error: bool = False) -> bool:
     if missing:
         ok = False
 
-    _check_label_distribution(df, COL_LABEL, stage)
+    _check_label_distribution(df, COL_RAW_LABEL, stage)
 
     # Check for extreme text lengths
     if COL_TEXT in df.columns:
@@ -151,11 +189,18 @@ def validate_processed(df: DataFrame, raise_on_error: bool = False) -> bool:
         ).first()
         log.info(
             "[%s] Text length — min=%d, max=%d, avg=%.0f",
-            stage, stats.min_len or 0, stats.max_len or 0, stats.avg_len or 0,
+            stage, 
+            stats.min_len or 0, 
+            stats.max_len or 0, 
+            stats.avg_len or 0,
         )
         max_allowed = exp.get("max_text_length", 100_000)
         if (stats.max_len or 0) > max_allowed:
-            log.warning("[%s] Extreme text length detected: %d", stage, stats.max_len)
+            log.warning(
+                "[%s] Extreme text length detected: %d", 
+                stage, 
+                stats.max_len
+            )
 
     min_rows = exp.get("min_row_count", 1)
     if not _check_row_count(df, min_rows, stage):
@@ -163,6 +208,8 @@ def validate_processed(df: DataFrame, raise_on_error: bool = False) -> bool:
 
     if not ok and raise_on_error:
         raise ValueError(f"[{stage}] Validation failed.")
+    
+    log.info("Validation successfully. No. of issues: %d", 0)
     return ok
 
 
@@ -171,6 +218,7 @@ def validate_features(df: DataFrame, raise_on_error: bool = False) -> bool:
     stage = "feature_store"
     ok    = True
 
+    log.info("Validating Features")
     missing = _check_required_columns(
         df,
         [COL_SERIES, COL_ISSUE, COL_YEAR, COL_PARAGRAPH_ID, COL_FEATURES],
@@ -185,6 +233,8 @@ def validate_features(df: DataFrame, raise_on_error: bool = False) -> bool:
 
     if not ok and raise_on_error:
         raise ValueError(f"[{stage}] Validation failed.")
+    
+    log.info("Validation successfully. No. of issues: %d", 0)
     return ok
 
 
@@ -193,6 +243,7 @@ def validate_predictions(df: DataFrame, raise_on_error: bool = False) -> bool:
     stage = "predictions"
     ok    = True
 
+    log.info("Validating predictions")
     missing = _check_required_columns(
         df,
         [COL_SERIES, COL_ISSUE, COL_YEAR, COL_PRED_LABEL],
@@ -207,7 +258,11 @@ def validate_predictions(df: DataFrame, raise_on_error: bool = False) -> bool:
             ~F.col(COL_PRED_LABEL).isin([0.0, 1.0, 2.0, 3.0])
         ).count()
         if unexpected:
-            log.warning("[%s] %d rows with unexpected pred_label values.", stage, unexpected)
+            log.warning(
+                "[%s] %d rows with unexpected pred_label values.", 
+                stage, 
+                unexpected
+            )
 
     if not ok and raise_on_error:
         raise ValueError(f"[{stage}] Validation failed.")

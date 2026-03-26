@@ -1,5 +1,6 @@
 """
-Centralised Spark Session Factory. All pipeline modues obtain session via get_spark_session().
+Centralised Spark Session Factory. 
+All pipeline modues obtain session via get_spark_session().
 """
 
 import os
@@ -8,8 +9,8 @@ from typing import Optional
 import yaml
 from pyspark.sql import SparkSession
 
-from src.utils.constants import SPARK_CONFIG_PATH
-from src.utils.logger import get_logger
+from .constants import SPARK_CONFIG_PATH
+from .logger import get_logger
 
 log = get_logger(__name__)
 
@@ -40,9 +41,9 @@ def get_spark_session(
     cfg = _load_spark_cfg()
 
     name = app_name or cfg.get("app_name", "newspaper-partisanship-ml")
-    master = cfg.get("master", "yarn")
+    # master = cfg.get("master", "yarn")
 
-    builder = SparkSession.builder.appName(name).master(master)
+    builder = SparkSession.builder.appName(name)
 
     # Apply config from YAML
     for k, v in cfg.get("spark_conf", {}).items():
@@ -58,8 +59,9 @@ def get_spark_session(
 
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel(os.getenv("SPARK_LOG_LEVEL", "WARN"))
+    spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
 
-    log.info("SparkSession created: app=%s, master=%s", name, master)
+    log.info("SparkSession created: app=%s", name)
     return spark
 
 def stop_spark_session(spark: SparkSession) -> None:
