@@ -1,7 +1,5 @@
 """Write Spark DataFrame to HDFS as Parquet, partitioned by year"""
 
-from typing import Optional
-
 from pyspark.sql import (
     DataFrame,
     DataFrameWriter,
@@ -24,9 +22,9 @@ def write_partition(
 ):
     """Write a single year's DataFrame to Parquet partition"""
     
-    df = df.withColumn(ts_col, F.current_timestamp())
-    if COL_YEAR not in df.columns:
-        df = df.withColumn(COL_YEAR, F.lit(year))
+    df = df.withColumn(ts_col, F.current_timestamp())\
+        .withColumn(COL_YEAR, F.lit(year))\
+        .repartition(F.col(COL_YEAR))
     
     log.info(
         "Writing year=%d partition to %s (mode=%s, compression=%s)",
@@ -36,40 +34,34 @@ def write_partition(
         compression
     )
 
-    df = df.repartition(4)
-
     (
         df.write
         .option("compression", compression)
+        .option("parquet.block.size", 256 * 1024 * 1024)
         .mode(mode)
         .partitionBy(COL_YEAR)
         .parquet(base_path)
     )
 
-    log.info(
-        "Successfully wrote year=%d to %s", 
-        year, 
-        base_path
-    )
+    log.info("Successfully wrote year=%d to %s", year, base_path)
 
 def write_to_delta(
     writer: DataFrameWriter,
     path: str,
-    partition_by: Optional[list],
-    optimize_write: bool = False,
     overwrite_schema: bool = False
 ) -> None:
     """Write joined dataframe to Delta Lake table"""
     
-    writer = writer.format("delta")
+    writer = (
+        writer.format("delta")
+        .option("optimizeWrite", "true")
+        .option("autoCompact", "true")
+        .option("delta.targetFileSize", "256MB")
+        .partitionBy(*COL_YEAR)
+    )
 
-    if partition_by:
-        writer = writer.partitionBy(*partition_by)
     if overwrite_schema:
         writer = writer.option("overwriteSchema", "true")
-    if optimize_write:
-        writer = writer.option("optimizeWrite", "true")
-        writer = writer.option("autoCompact", "true")
     
     writer.mode("append").save(path)
 

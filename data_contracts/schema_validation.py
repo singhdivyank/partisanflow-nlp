@@ -1,14 +1,14 @@
 """Data contract validation for every stage of pipeline."""
 
-import json
-from pathlib import Path
+from pyspark.sql import DataFrame, functions as F
 
-from pyspark.sql import DataFrame, functions as F, types as T
-from pyspark.ml.linalg import VectorUDT
-
+from validation_utils import (
+    _load_expectations,
+    _check_required_columns,
+    _check_label_distribution,
+    _check_row_count
+)
 from src.utils.constants import (
-    COL_CONTENTS,
-    COL_DATE,
     COL_FEATURES,
     COL_ISSUE,
     COL_RAW_LABEL,
@@ -21,81 +21,6 @@ from src.utils.constants import (
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
-
-_EXPECTATIONS_PATH = Path(__file__).parent / "expectations.json"
-
-# SCHEMA VALIDATORS
-
-RAW_PARQUET_SCHEMA = T.StructType([
-    T.StructField(COL_SERIES, T.StringType(),    nullable=False),
-    T.StructField(COL_ISSUE,  T.StringType(),    nullable=False),
-    T.StructField(COL_DATE,   T.DateType(),      nullable=True),
-    T.StructField(COL_TEXT,   T.StringType(),    nullable=False),
-])
-
-METADATA_SCHEMA = T.StructType([
-    T.StructField(COL_SERIES,   T.StringType(), nullable=False),
-    T.StructField(COL_CONTENTS,   T.StringType(), nullable=True),
-])
-
-PROCESSED_SCHEMA = T.StructType([
-    T.StructField(COL_SERIES,       T.StringType(), nullable=False),
-    T.StructField(COL_ISSUE,        T.StringType(), nullable=False),
-    T.StructField(COL_YEAR,         T.IntegerType(), nullable=False),
-    T.StructField(COL_PARAGRAPH_ID, T.LongType(),   nullable=False),
-    T.StructField(COL_TEXT,         T.StringType(), nullable=True),
-    T.StructField(COL_RAW_LABEL,        T.DoubleType(), nullable=True),
-])
-
-FEATURE_STORE_SCHEMA = T.StructType([
-    T.StructField(COL_SERIES,       T.StringType(), nullable=False),
-    T.StructField(COL_ISSUE,        T.StringType(), nullable=False),
-    T.StructField(COL_YEAR,         T.IntegerType(), nullable=False),
-    T.StructField(COL_PARAGRAPH_ID, T.LongType(),   nullable=False),
-    T.StructField(COL_FEATURES,     VectorUDT(),  nullable=False),
-    T.StructField(COL_RAW_LABEL,        T.DoubleType(), nullable=True),
-])
-
-# Helpers
-
-def _load_expectations() -> dict:
-    if _EXPECTATIONS_PATH.exists():
-        with open(_EXPECTATIONS_PATH) as f:
-            return json.load(f)
-    log.warning("expectations.json not found at %s", _EXPECTATIONS_PATH)
-    return {}
-
-def _check_required_columns(df: DataFrame, required: list[str], stage: str) -> list[str]:
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        log.error("[%s] Missing columns: %s", stage, missing)
-    return missing
-
-def _check_label_distribution(df: DataFrame, label_col: str, stage: str) -> None:
-    if label_col not in df.columns:
-        return
-    dist = df.groupBy(label_col).count().orderBy(label_col)
-    log.info("[%s] Label distribution:", stage)
-    for row in dist.collect():
-        log.info(
-            "  label=%.1f  count=%d", 
-            row[label_col],
-            row["count"]
-        )
-
-def _check_row_count(row_count, min_rows: int, stage: str) -> bool:
-    log.info("[%s] Row count: %d", stage, row_count)
-    if row_count < min_rows:
-        log.error(
-            "[%s] Row count %d below minimum %d.", 
-            stage, 
-            row_count, 
-            min_rows
-        )
-        return False
-    return True
-
-# Public validators
 
 def validate_raw(df: DataFrame, raise_on_error: bool = False) -> bool:
     """Validate raw parquet input."""
@@ -127,6 +52,37 @@ def validate_raw(df: DataFrame, raise_on_error: bool = False) -> bool:
     
     return ok
 
+def validate_year(df: DataFrame, year: int, is_training: bool = False) -> bool:
+    """Orchestrate quality checks for a year"""
+
+    log.info("Quality checks on preprocessed data...")
+    ok = True
+    
+    if is_training and COL_RAW_LABEL in df.columns:
+        present_labels = {
+            row[COL_RAW_LABEL]
+            for row in df.select(COL_RAW_LABEL).dropna().distinct().collect()
+        }
+        
+        missing = [lbl for lbl in [0, 1] if lbl not in present_labels]
+        if missing:
+            log.error(
+                "[validate | year=%d] Training labels %s not found in data.", 
+                year, 
+                missing
+            )
+            ok = False
+        else:
+            log.info("[validate | year=%d] All training labels present.", year)
+            ok = False
+    elif is_training:
+        log.error("[validate | year=%d] All training labels missing", year)
+        ok = False
+
+    if not ok:
+        raise ValueError(f"Data validation failed for year={year}. See logs for details.")
+
+    return ok
 
 def validate_processed(df: DataFrame, raise_on_error: bool = False) -> bool:
     """Validate post-ETL processed DataFrame."""
@@ -145,7 +101,6 @@ def validate_processed(df: DataFrame, raise_on_error: bool = False) -> bool:
 
     _check_label_distribution(df, COL_RAW_LABEL, stage)
 
-    # Check for extreme text lengths
     if COL_TEXT in df.columns:
         stats = df.select(
             F.min(F.length(COL_TEXT)).alias("min_len"),
@@ -177,7 +132,6 @@ def validate_processed(df: DataFrame, raise_on_error: bool = False) -> bool:
     log.info("Validation successfully. No. of issues: %d", 0)
     return ok
 
-
 def validate_features(df: DataFrame, raise_on_error: bool = False) -> bool:
     """Validate feature store DataFrame."""
     stage = "feature_store"
@@ -198,7 +152,6 @@ def validate_features(df: DataFrame, raise_on_error: bool = False) -> bool:
     log.info("Validation successfully. No. of issues: %d", 0)
     return ok
 
-
 def validate_predictions(df: DataFrame, raise_on_error: bool = False) -> bool:
     """Validate batch prediction output."""
     stage = "predictions"
@@ -213,7 +166,6 @@ def validate_predictions(df: DataFrame, raise_on_error: bool = False) -> bool:
     if missing:
         ok = False
 
-    # Warn if any label outside expected range
     if COL_PRED_LABEL in df.columns:
         unexpected = df.filter(
             ~F.col(COL_PRED_LABEL).isin([0.0, 1.0, 2.0, 3.0])
@@ -227,4 +179,5 @@ def validate_predictions(df: DataFrame, raise_on_error: bool = False) -> bool:
 
     if not ok and raise_on_error:
         raise ValueError(f"[{stage}] Validation failed.")
+    
     return ok

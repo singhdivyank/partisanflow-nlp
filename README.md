@@ -250,7 +250,6 @@ newspaper-partisanship-ml/
 │   │   ├── __init__.py
 │   │   ├── ingest.py
 │   │   ├── clean_transform.py
-│   │   ├── validate.py
 │   │   └── partition_writer.py
 │   │
 │   ├── features/

@@ -19,7 +19,7 @@ delta_paths:
 
 # Delta Lake settings
 delta:
-  optimize_after_write: false
+  optimize_after_write: true # can remove this setting, set as default in code
   auto_compact: false
   vaccum_retention_hours: 168
   z_order_columns:
