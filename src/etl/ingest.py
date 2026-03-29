@@ -31,19 +31,14 @@ def read_parquet(spark: SparkSession, path: str, year: int) -> DataFrame:
     DataFrame with columns: series_id, issue_id, date, text
     """
 
-    log.info(
-        "Reading raw Parquet from %s, filtering year=%d", 
-        path, 
-        year
-    )
+    log.info("Reading raw Parquet from %s, filtering year=%d", path, year)
     
     df = (
         spark.read.parquet(path)
-        .filter((F.col(COL_DATE)>='1869') & (F.col(COL_DATE)<'1870'))
+        .filter((F.col(COL_DATE)>=f"{year}-01-01") & (F.col(COL_DATE)<f"{year+1}-01-01"))
         .select(COL_SERIES, COL_ISSUE, COL_DATE, COL_TEXT)
     )
     
-    log.info("Raw Parquet rows for year=%d: %d", year, df.count())
     return df
 
 def read_metadata(
@@ -77,7 +72,6 @@ def read_metadata(
         .select(COL_CONTENTS, COL_SERIES)
         .dropna(subset=[COL_SERIES])
         .filter(~F.col(COL_SERIES).isin(EXCLUDED_SERIES))
-        .filter(~F.col(COL_SERIES).isin(EXCLUDED_SERIES))
     )
 
     contents_arr = F.split(F.col(label_col), delimiter)
@@ -95,7 +89,6 @@ def read_metadata(
         F.col(COL_RAW_LABEL).alias(COL_RAW_LABEL),
     )
 
-    log.info("Metadata rows loaded: %d", df.count())
     return df
 
 def ingest(
@@ -105,7 +98,7 @@ def ingest(
     label_col: str,
     label_delimiter: str,
     labels: dict,
-    year: int = TRAIN_YEAR
+    year: int = TRAIN_YEAR,
 ) -> DataFrame:
     """
     Full ingestion pipeline for a given year.
@@ -123,8 +116,12 @@ def ingest(
     
     log.info("Joining raw data with metadata on '%s'", COL_SERIES)
 
-    joined_df = raw_df.join(metadata_df, on=COL_SERIES, how="inner")
-    joined_df = joined_df.filter(joined_df["label"].isin(labels["train_labels"]))
+    joined_df = (
+        raw_df.join(F.broadcast(metadata_df), on=COL_SERIES, how="inner")
+        .filter(F.col(COL_RAW_LABEL).isin(labels["train_labels"]))
+        .withColumn("year", F.lit(year))
+    )
 
-    log.info("Rows after inner join: %d", joined_df.count())
+    log.info("Inner join complete")
+    
     return joined_df

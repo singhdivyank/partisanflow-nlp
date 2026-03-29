@@ -230,6 +230,7 @@ newspaper-partisanship-ml/
 │
 ├── README.md
 ├── requirements.txt
+├── main.py
 ├── setup.py
 ├── .env
 ├── .gitignore
@@ -246,39 +247,43 @@ newspaper-partisanship-ml/
 │
 ├── src/
 │   ├── etl/
+│   │   ├── __init__.py
 │   │   ├── ingest.py
 │   │   ├── clean_transform.py
 │   │   ├── validate.py
 │   │   └── partition_writer.py
 │   │
 │   ├── features/
+│   │   ├── __init__.py
 │   │   ├── tokenizer.py
 │   │   ├── tfidf_pipeline.py
 │   │   └── feature_store.py
 │   │
 │   ├── training/
+│   │   ├── __init__.py
 │   │   ├── train.py
 │   │   ├── hyperparameter_tuning.py
 │   │   ├── evaluate.py
 │   │   └── register_model.py
 │   │
 │   ├── inference/
+│   │   ├── __init__.py
 │   │   ├── batch_predict.py
 │   │   ├── write_predictions.py
 │   │   └── model_loader.py
 │   │
 │   ├── monitoring/
+│   │   ├── __init__.py
 │   │   ├── data_drift.py
 │   │   ├── concept_drift.py
 │   │   ├── metrics_logger.py
 │   │   └── alerting.py
 │   │
 │   ├── utils/
-│   │   ├── spark_session.py
+│   │   ├── __init__.py
+│   │   ├── constants.py
 │   │   ├── logger.py
-│   │   └── constants.py
-│   │
-│   └── main.py
+│   │   └── spark_session.py
 │
 ├── dags/
 │   └── newspaper_pipeline_dag.py
@@ -294,3 +299,12 @@ newspaper-partisanship-ml/
     ├── test_training.py
     └── test_drift.py
 ```
+
+Download two .jar files onto local device and upload to cluster:
+1. `delta-spark_2.13-4.0.0.jar` [download link](https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.0.0/)
+2. `delta-storage-4.0.0.jar` [download link](https://repo1.maven.org/maven2/io/delta/delta-storage/4.0.0/)
+
+
+scp delta-spark_2.13-4.0.0.jar <user_name>>@<LOGIN_NODE>:~/spark-jars/
+ls -lh ~/spark-jars
+Added JAR file:///home/singh.divya/spark-jars/delta-spark_2.13-4.0.0.jar at spark://c0615:32817/jars/delta-spark_2.13-4.0.0.jar with timestamp 1774752878790

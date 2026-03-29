@@ -78,16 +78,11 @@ def clean_paragraphs(
     clean_udf = make_clean_paragraphs_udf(min_word_len)
     
     df = df.withColumn(COL_CLEANED, clean_udf(F.col(COL_TEXT)))
-    df = df.withColumn("_tokens", F.split(F.col(COL_CLEANED)), r"\s+")
-    df = df.filter(F.size(F.col("_tokens")) > min_para_words).drop("_tokens")
-    df = df.cache()
-    retained = df.count()
-
-    log.info(
-        "Paragraphs retained after cleaning (word count > %d): %d", 
-        min_para_words, 
-        retained
-    )
+    log.info("Obtained cleaned columns")
+    df = df.withColumn("_tokens", F.split(F.col(COL_CLEANED), r"\s+"))
+    log.info("Created tokens")
+    df = df.filter(F.size(F.col("_tokens")) > min_para_words).drop("_tokens") 
+    log.info("Filtered all paragraphs with (word count > %d)", min_para_words)
     return df
 
 def transform(
