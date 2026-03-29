@@ -27,7 +27,15 @@ def _load_model_cfg() -> dict:
     with open(MODEL_CONFIG_PATH) as f:
         return yaml.safe_load(f)
 
-def run_etl(year: int, cfg: dict) -> None:
+def run_etl(
+    year: int, 
+    cfg: dict,
+    use_delta: bool = True
+) -> None:
+    
+    """
+    Run ETL pipeline with optional Delta Lake support
+    """
     
     from data_contracts.schema_validation import validate_raw
     from src.etl.clean_transform import transform
@@ -37,16 +45,21 @@ def run_etl(year: int, cfg: dict) -> None:
 
     spark = get_spark_session()
     paths = cfg["paths"]
+    delta_configs = cfg["delta"]
 
     log.info("ETL: year=%d", year)
 
+    parquet_path=os.getenv("PARQUET_FILE_PATH"),
+    metadata_path=os.getenv("METADATA_PATH")
+
     raw_df = ingest(
         spark=spark,
-        parquet_path=os.getenv("PARQUET_FILE_PATH"),
-        metadata_path=os.getenv("METADATA_PATH"),
+        parquet_path=parquet_path,
+        metadata_path=metadata_path,
         label_col=cfg['label_column_metadata'],
         label_delimiter=cfg['label_delimiter'],
-        labels=cfg['labels']
+        labels=cfg['labels'],
+        year=year
     )
     
     validated = validate_raw(raw_df, raise_on_error=True)
@@ -69,7 +82,29 @@ def run_etl(year: int, cfg: dict) -> None:
         return
     
     log.info("Validation successfully completed. No. of issues: %d", 0)
-    write_partition(df=processed_df, base_path=paths["processed_base"], year=year)
+
+    if use_delta:
+        from src.etl.partition_writer import write_to_delta
+
+        delta_base = os.path.expanduser("~/delta")
+        delta_processed_path = os.path.join(delta_base, "processed_data")
+
+        log.info("Writing processed data to Delta Lake: %s", delta_processed_path)
+        
+        writer = processed_df.write
+        write_to_delta(
+            writer=writer,
+            path=delta_processed_path,
+            partition_by=["year"],
+            optimize_write=delta_configs["optimize_after_write"]
+        )
+    else:
+        write_partition(
+            df=processed_df, 
+            base_path=paths["processed_base"], 
+            year=year
+        )
+    
     log.info("ETL complete for year=%d", year)
 
 def run_features(year: int, cfg: dict) -> None:
@@ -159,7 +194,11 @@ def run_register(model_cfg: dict) -> None:
     )
     log.info("Model version %s transitioned to %s.", version, MLFLOW_STAGE_PRODUCTION)
 
-def run_predict(year: int, cfg: dict, model_cfg) -> None:
+def run_predict(
+    year: int, 
+    cfg: dict, 
+    model_cfg
+) -> None:
     from src.etl.partition_writer import read_partition, write_partition
     from src.inference.batch_predict import load_production_model, run_predictions
     from src.utils.constants import COL_PRED_TS, COL_YEAR
@@ -235,6 +274,12 @@ def parse_args():
         choices=["etl", "features", "train", "register", "predict", "drift"]
     )
     parser.add_argument("--year", type=int, default=None)
+    parser.add_argument(
+        "--use-delta",
+        dest="use_delta",
+        action="store_true",
+        help="Enable Delta Lake usage"
+    )
     return parser.parse_args()
 
 def main():
@@ -244,11 +289,12 @@ def main():
 
     task = args.task
     year = args.year
+    use_delta = args.use_delta
 
     try:
         if task == "etl":
             assert year is not None, "--year is required for etl"
-            run_etl(year=year, cfg=cfg)
+            run_etl(year=year, cfg=cfg, use_delta=use_delta)
         elif task == "features":
             assert year is not None, "--year is required for features"
             run_features(year=year, cfg=cfg)

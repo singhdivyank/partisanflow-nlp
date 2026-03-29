@@ -4,6 +4,7 @@ pyyaml==6.0.3
 pydantic==2.12.5
 pydantic-settings==2.12.0
 pyspark==4.1.1
+delta-spark==4.0.0
 mlflow==3.10.1
 streamlit==1.55.0
 # plotly==5.24.1

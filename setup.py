@@ -18,6 +18,7 @@ _LONG_DESC = (_HERE / "README.md").read_text(encoding="utf-8") if (_HERE / "READ
 
 _INSTALL_REQUIRES = [
     "pyspark==4.1.1",
+    "delta-spark==4.0.0",
     "mlflow==3.10.1",
     "scikit-learn==1.8.0",
     "numpy==2.4.3",
@@ -98,7 +99,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.13",
         "Intended Audience :: Science/Research",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Topic :: Supervised Machine Learning/Big Data :: Artificial Intelligence",
         "Operating System :: OS Independent",
     ],
 )

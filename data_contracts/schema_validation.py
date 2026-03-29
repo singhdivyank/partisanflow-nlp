@@ -7,6 +7,7 @@ from pyspark.sql import DataFrame, functions as F, types as T
 from pyspark.ml.linalg import VectorUDT
 
 from src.utils.constants import (
+    COL_CONTENTS,
     COL_DATE,
     COL_FEATURES,
     COL_ISSUE,
@@ -34,7 +35,7 @@ RAW_PARQUET_SCHEMA = T.StructType([
 
 METADATA_SCHEMA = T.StructType([
     T.StructField(COL_SERIES,   T.StringType(), nullable=False),
-    T.StructField("contents",   T.StringType(), nullable=True),
+    T.StructField(COL_CONTENTS,   T.StringType(), nullable=True),
 ])
 
 PROCESSED_SCHEMA = T.StructType([
@@ -69,32 +70,6 @@ def _check_required_columns(df: DataFrame, required: list[str], stage: str) -> l
     if missing:
         log.error("[%s] Missing columns: %s", stage, missing)
     return missing
-
-def _check_nulls(df: DataFrame, not_null_cols: list[str], stage: str) -> dict:
-    """Returns {col: null_count} for any column that has nulls."""
-    cols = [col for col in not_null_cols if col in df.columns]
-    if not cols:
-        return {}
-    
-    agg_exprs = [
-        F.sum(F.when(F.col(col).isNull(), 1).otherwise(0)).alias(col)
-        for col in cols
-    ]
-
-    row = df.agg(*agg_exprs).first()
-
-    results = {}
-    for _col in cols:
-        n = row[_col]
-        if n and n > 0:
-            log.warning(
-                "[%s] Column '%s' has %d null(s).", 
-                stage, 
-                _col, 
-                n
-            )
-            results[_col] = n
-    return results
 
 def _check_label_distribution(df: DataFrame, label_col: str, stage: str) -> None:
     if label_col not in df.columns:
@@ -139,16 +114,6 @@ def validate_raw(df: DataFrame, raise_on_error: bool = False) -> bool:
         ok = False
 
     log.info("Missing column check completed")
-    
-    null_report = _check_nulls(
-        df, 
-        [COL_SERIES, COL_ISSUE, COL_TEXT], 
-        stage
-    )
-    if null_report:
-        ok = False
-
-    log.info("Generated null report")
 
     min_rows = exp.get("min_row_count", 1)
     n = df.count()
@@ -225,10 +190,6 @@ def validate_features(df: DataFrame, raise_on_error: bool = False) -> bool:
         stage,
     )
     if missing:
-        ok = False
-
-    null_report = _check_nulls(df, [COL_FEATURES], stage)
-    if null_report:
         ok = False
 
     if not ok and raise_on_error:

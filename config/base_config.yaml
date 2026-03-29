@@ -4,12 +4,30 @@ project:
 
 # Data paths
 paths:
-  processed_base: "hdfs://cluster/processed/newspapers/"
-  feature_store: "hdfs://cluster/feature_store/newspaper_features_v1"
-  predictions: "hdfs://cluster/predictions/newspaper_predictions_v1"
-  drift_metrics: "hdfs://cluster/monitoring/newspaper_drift_metrics_v1"
-  eval_predictions: "hdfs://cluster/predictions/predictions_1869_eval_v1"
-  mlflow_artifacts: "hdfs://cluster/mlflow/artifacts"
+  processed_base: "/user/singh.divya/processed/newspapers/"
+  feature_store: "/user/singh.divya/feature_store/newspaper_features_v1"
+  predictions: "/user/singh.divya/predictions/newspaper_predictions_v1"
+  drift_metrics: "/user/singh.divya/monitoring/newspaper_drift_metrics_v1"
+  eval_predictions: "/user/singh.divya/predictions/predictions_1869_eval_v1"
+  mlflow_artifacts: "/user/singh.divya/mlflow/artifacts"
+
+# Delta Lake tables
+delta_paths:
+  delta_features: "/home/singh.divya/delta/feature_store"
+  delta_predictions: "/home/singh.divya/delta/predictions"
+  delta_drift: "/home/singh.divya/delta/drift_metrics"
+
+# Delta Lake settings
+delta:
+  optimize_after_write: false
+  auto_compact: false
+  vaccum_retention_hours: 168
+  z_order_columns:
+    joined: ["series", "year"]
+    processed: ["series", "issue", "year"]
+    features: ["year"]
+    predictions: ["year"]
+  checkpoint_interval: 10
 
 # Year ranges
 years:

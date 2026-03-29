@@ -1,6 +1,13 @@
 """Write Spark DataFrame to HDFS as Parquet, partitioned by year"""
 
-from pyspark.sql import DataFrame, functions as F, SparkSession
+from typing import Optional
+
+from pyspark.sql import (
+    DataFrame,
+    DataFrameWriter,
+    SparkSession, 
+    functions as F, 
+)
 
 from src.utils.constants import COL_INGESTION_TS, COL_YEAR
 from src.utils.logger import get_logger
@@ -12,14 +19,10 @@ def write_partition(
     base_path: str,
     year: int, 
     ts_col: str = COL_INGESTION_TS,
-    partition_cols: list = None,
     mode: str = "overwrite",
     compression: str = "snappy"
 ):
     """Write a single year's DataFrame to Parquet partition"""
-
-    if partition_cols is None:
-        partition_cols = [COL_YEAR]
     
     df = df.withColumn(ts_col, F.current_timestamp())
     if COL_YEAR not in df.columns:
@@ -27,20 +30,48 @@ def write_partition(
     
     log.info(
         "Writing year=%d partition to %s (mode=%s, compression=%s)",
-        year, base_path, mode, compression
+        year, 
+        base_path, 
+        mode, 
+        compression
     )
 
-    df = df.repartition(200, F.col(COL_YEAR))
+    df = df.repartition(4)
 
     (
         df.write
         .option("compression", compression)
-        .partitionBy(*partition_cols)
         .mode(mode)
+        .partitionBy(COL_YEAR)
         .parquet(base_path)
     )
 
-    log.info("Successfully wrote year=%d to %s", year, base_path)
+    log.info(
+        "Successfully wrote year=%d to %s", 
+        year, 
+        base_path
+    )
+
+def write_to_delta(
+    writer: DataFrameWriter,
+    path: str,
+    partition_by: Optional[list],
+    optimize_write: bool = False,
+    overwrite_schema: bool = False
+) -> None:
+    """Write joined dataframe to Delta Lake table"""
+    
+    writer = writer.format("delta")
+
+    if partition_by:
+        writer = writer.partitionBy(*partition_by)
+    if overwrite_schema:
+        writer = writer.option("overwriteSchema", "true")
+    if optimize_write:
+        writer = writer.option("optimizeWrite", "true")
+        writer = writer.option("autoCompact", "true")
+    
+    writer.mode("append").save(path)
 
 def read_partition(
     spark: SparkSession, 
